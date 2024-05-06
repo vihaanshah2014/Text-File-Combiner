@@ -1,0 +1,191 @@
+CS 214 / Generic memory operations
+==================================
+
+case study: sorting an array
+
+    void sort_ints(int *array, int length);
+    void sort_chars(char *array, int length);
+
+what is the difference between these?
+    - comparison function
+    - size of the data units
+
+
+what do we need to write a generic sorting function?
+- some way to pass an array without restricting its type
+    use void *
+
+- some way to specify how to compare items
+    use a function pointer
+    return_type (*compare) (arg1_type, arg2_type, ...)
+    
+    int (*compare) (void *, void *)
+    
+
+int (*fun) (void *);   // fun is a pointer to a function
+int *fun (void *);     // prototype for a function
+    
+    
+- size of array elements
+
+
+
+void sort(
+    void *array,
+    size_t array_length,
+    size_t item_size,
+    int (*comparison_function) (void *, void *)
+);
+
+
+copying memory
+--------------
+
+memcpy()  - copies a specified number of bytes from one location
+            to another (locations cannot overlap)
+            
+    void *memcpy(void *dest, void *src, size_t size);
+        copies size number of bytes from src to dest
+        returns dest
+    
+    there are no safety checks!
+        we must ensure that the source and destination objects
+        are large enough (and that they are allocated)
+    
+
+    example: a and b are both arrays of 20 ints
+    
+    b = a;  // nope
+    memcpy(b, a, sizeof(int) * 20);   // yes
+    
+
+memmove()  - copies a specified number of bytes from one location
+             to another (locations may overlap)
+
+
+    void *memmove(void *dest, void *src, size_t size);
+    
+
+
+strcpy()  - copies a string from one place to another
+
+    char *strcpy(char *dest, char *src);
+
+
+    note that no size is provided
+        strcpy() copies from the source until it finds a terminator
+        
+    we need to make sure the source contains a string (w/terminator)
+    we need to make sure the destination is large enough
+    
+    strcpy() needs to examine the data it copies, so it will
+        never be faster than memcpy()
+        - use memcpy() if you already know the length of a string
+        
+e.g., a common pattern for duplicating a string
+    int len = strlen(src) + 1;
+    char *dest = malloc(len);
+    memcpy(dest, src, len);
+    
+    or just use strdup() if your compiler provides it
+
+
+strncpy() - copies up to n bytes from a location to another
+
+    char *strncpy(char *dest, char *src, size_t n);
+    
+    strncpy() copies a string, or the first n bytes
+        -- if it stops before the end of the string, it doesn't
+            write a terminator
+            
+
+strcat() - puts one string after the end of another string
+
+    char *strcat(char *dest, char *src);
+    char *strncat(char *dest, char *src, size_t n);
+    
+    src will be copied to dest starting at the terminator in dest
+    (dest must have a terminator and enough space)
+    
+    strcat() always reads through dest, so repeatedly copying
+    to a dest is quadratic time! (use pointers and memcpy())
+
+
+memset()
+calloc()
+realloc()
+
+----
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+
+
+
+void sort(void *array, size_t alength, size_t esize,
+    int (*compare) (const void *, const void *))
+{
+    char *base = array;
+    void *temp = malloc(esize);
+
+
+    for (int i = 0; i < alength; i++) {
+
+    for (int j = 1; j < alength; j++) {
+        char *prev = base + (j-1) * esize;
+        char *this = base + j * esize;
+        if (compare(prev, this) > 0) {
+            // swap prev and this
+            memcpy(temp, this, esize);
+            memcpy(this, prev, esize);
+            memcpy(prev, temp, esize);
+        }
+
+    }
+
+    }
+
+    free(temp);
+}
+
+int compare_ints(const void *x, const void *y)
+{
+    int a = * (int *) x;
+    int b = * (int *) y;
+    return a - b;
+}
+
+int compare_strings(const void *x, const void *y)
+{
+    char *a = *(char **)x;
+    char *b = *(char **)y;
+    return strcmp(a, b);
+}
+
+
+#define ALEN 5
+#define BLEN 4
+
+int main(int argc, char **argv)
+{
+    int A[] = { 7, 8, 0, -5, 20 };
+    char *B[] = { "foo", "bar", "baz", "falala" };
+        // note: B is an array of pointers (to strings)
+
+    sort(A, ALEN, sizeof(int), compare_ints);
+    sort(B, BLEN, sizeof(char *), compare_strings);
+
+    for (int i = 0; i < ALEN; i++) {
+        printf(" %d", A[i]);
+    }
+    printf("\n");
+
+    for (int i = 0; i < BLEN; i++) {
+        printf(" %s", B[i]);
+    }
+    printf("\n");
+
+    return EXIT_SUCCESS;
+}

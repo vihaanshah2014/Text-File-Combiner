@@ -1,0 +1,190 @@
+CS 214 / Multithreading examples
+=================================
+
+Reminder: late policy is 10 points per day (rounded up)
+    but will not reduce score below 60
+
+Final exam date will be announced soon
+    will be given on-line via Canvas
+    24-hour window
+    format: primarily multiple choice
+
+
+there will be no project IV
+    we will repurpose it as in-class examples
+
+
+
+exercise: read/write lock
+-------------------------
+
+allows any number of threads to have read access concurrently
+or one thread has write access
+
+four operations
+    read_lock:
+        obtains read access
+        blocks if any thread has write access
+    read_unlock
+    write_lock
+        obtains write access
+        blocks if any thread has read or write access
+    write_unlock
+    
+    init
+    destroy
+
+
+information you will probably need
+- how many threads have read access
+- how many threads are waiting for write access
+- whether the lock is currently open for reading or writing or neither
+
+- use mutex/condition variable or semaphores within the lock functions
+
+
+
+starvation
+----------
+
+occurs when a thread is waiting for a resource, but other threads prevent
+it from acquiring the resource
+
+
+for example, multiple threads can be getting read locks in overlapping
+finite time periods. a thread waiting for write access may wait
+indefinitely
+
+    one possible solution: enforce turn-taking
+        e.g., don't allow threads to get read access if a thread is
+            waiting to get write access
+
+
+
+livelock
+--------
+
+occurs when two or more tasks make state changes that undo the
+    work of the other tasks
+    -> the tasks end up spending all their time undoing and redoing
+        the same state changes, and never actually advancing to do
+        something productive
+
+
+
+
+    thread A            thread B
+    --------            --------
+    while X != 1        while X != 0
+        X = 1               X = 0
+    do stuff            do stuff
+    
+
+
+another queue example
+---------------------
+
+scenario: multi-threaded recursive directory traversal
+    want to divide work among N threads, for some fixed N
+    
+idea:
+    pool (list) of directories to be traversed
+    each thread will:
+        1. obtain directory path from pool
+        2. traverse directory
+        3. add any subdirectories to the pool
+        4. repeat until "finished"
+
+
+    advantages of this approach:
+        finite number of directories open at once
+        work automatically distributes among threads
+        
+questions:
+    how do we know when we're done?
+        - pool is empty & and all the threads are waiting
+
+    can we use a bounded queue?
+        - we risk deadlock if the queue is full and all threads are
+            trying to enqueue
+
+
+    typedef struct {
+        int arraysize;
+        int itemcount;
+        char **paths;   // array of strings
+        int active;     // count of active threads
+        pthread_mutex_t lock;
+        pthread_cond_t read_ready;
+    } pool_t;
+    
+    void pool_init(pool_t *p, int threads, int capacity)
+    {
+        ...
+        p->active = threads;
+        ...
+    }
+    
+    void pool_add(pool_t *p, char *path)
+    {
+        pthread_mutex_lock(&p->lock);
+        
+        // check for free space
+        if (p->itemcount == p->arraysize) {
+            p->arraysize *= 2;
+            p->paths = realloc(p->paths, p->arraysize * sizeof(char *));
+        }
+        
+        p->paths[p->itemcount] = path;
+        p->itemcount++;
+        
+        pthread_cond_signal(&p->read_ready);
+        
+        pthread_mutex_unlock(&p->lock);
+    }
+    
+    // return 1 for success, 0 for failure
+    int pool_remove(pool_t *p, char **dst)
+    {
+        pthread_mutex_lock(&p->lock);
+        
+        if (p->itemcount == 0) {
+            p->active--;
+            
+            // check whether we were the last active thread
+            if (p->active == 0) {
+                pthread_cond_broadcast(&p->read_ready);
+                pthread_mutex_unlock(&p->lock);
+                return 0;
+            }
+            
+            do {
+                pthread_cond_wait(&p->read_ready, &p->lock);
+                
+                // check whether any threads are still running
+                if (p->active == 0 && p->itemcount == 0) {
+                    pthread_mutex_unlock(&p->lock);
+                    return 0;
+                }
+            } while (p->itemcount == 0);
+            
+            
+            p->active++;
+        }
+        
+        p->itemcount--;
+        *dst = p->paths[p->itemcount];
+        
+        pthread_mutex_unlock(&p->lock);
+        
+        return 1;
+    
+    }
+    
+    
+
+
+
+
+
+

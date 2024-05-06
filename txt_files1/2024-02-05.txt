@@ -1,0 +1,193 @@
+CS 214 / ArrayList and make
+===========================
+
+Project I will be posted later tonight
+We will discuss it in class Wednesday
+
+
+ArrayList
+---------
+
+an array that we can expand or contract
+
+- what sort of operations do we need to support?
+    - push
+    - pop
+    - indexing
+    
+    - initialize
+    - destroy
+
+- we need the data structure itself
+    - an array
+    - number of elements in the list
+    - size of the array
+
+central idea:
+    we add elements to the array until it is full
+    when it is full, we replace the array with a bigger one
+
+
+
+our project
+    - test.c        - test driver (a client of ArrayList)
+    - arraylist.c   - implementation of functions
+    - arraylist.h   - type definition & function prototypes
+
+
+compilation strategy
+    compile arraylist.c -> arraylist.o
+    compile test.c -> test.o
+    link arraylist.o test.o -> test
+    
+
+
+changing the size of a heap object (sometimes)
+
+void *realloc(void *, size_t);
+
+    int *q = realloc(p, new_size);
+        if realloc has enough space, q and p will point to the same address
+        otherwise, q points to the new location and p is dead
+
+    it is safest to assume that any object passed to realloc() has
+    been moved
+    - this can be a problem if we have multiple pointers into an object,
+        because we need to update them all
+        
+    p = realloc(p, size);
+        // sometimes considered an anti-pattern
+        // if realloc() fails, it will return NULL and not free the
+        //  original object  -- and now we no longer have a pointer
+
+
+make
+----
+
+make is used to manage compiling our projects
+we use a "makefile" to describe how to create certain files
+
+
+<file to create>:   <list of dependencies>
+	<commands to create the file> 
+	
+commands must be indented with a single tab character -- no spaces!
+
+
+arraylist.o: arraylist.c arraylist.h
+	gcc -c -Wall arraylist.c
+	
+test.o: test.c arraylist.h
+	gcc -c -Wall test.c
+
+test: test.o arraylist.o
+	gcc test.o arraylist.o -o test
+
+
+
+when make is called with no arguments, it will use the first recipe
+in the makefile
+
+you can also provide one or more specific targets to make
+
+when make tries to create a target, it checks:
+1. does a file by this name exist?
+2. are all the dependencies (if any) up to date?
+3. if the file exists and is older than any of its dependencies, execute
+	the recipe
+
+
+more advanced make
+------------------
+
+we can have variables in a makefile
+
+to create a variable, write
+
+VAR_NAME = some text
+
+to use a variable, write $(VAR_NAME)
+
+two commonly used variables that make can use
+
+CC      - C compiler
+CFLAGS  - options to give to C compiler
+
+make uses these to create X.o files from X.c files, if no rule is given
+
+
+
+CC = gcc
+CFLAGS = -Wall -fsanitize=address -std=c99 -O2
+
+test: test.o arraylist.o
+	$(CC) $(CFLAGS) test.o arraylist.o -o test
+
+arraylist.o: arraylist.c arraylist.h
+	$(CC) $(CFLAGS) -c -Wall arraylist.c
+	
+test.o: test.c arraylist.h
+	$(CC) $(CFLAGS) -c -Wall test.c
+
+
+clean:
+	rm *.o test
+
+
+
+if we remove the rules for arraylist.o and test.o, make will use its
+default rule for .o files
+
+
+generalized recipes
+-------------------
+
+when make executes a recipe, it defines a few additional variables
+
+    $@    - the name of the target we are creating
+    $^    - the list of dependencies for the current target
+    $<    - the first dependency of the current target
+    
+using these allows us to avoid repeating ourselves
+
+test: test.o arraylist.o
+	$(CC) $(CFLAGS) $^ -o $@
+	
+
+we can use % to create recipe patterns
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+this says how to create any file ending in .o using a file ending with .c
+
+if we provide a specific recipe, make will use that even if a wildcard
+recipe exists
+
+
+we can use rules with no commands to indicate additional dependencies
+
+arraylist.o: arraylist.h
+test.o: arraylist.h
+
+or
+
+arraylist.o test.o: arraylist.h
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

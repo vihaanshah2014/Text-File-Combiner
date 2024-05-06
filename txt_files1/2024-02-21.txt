@@ -1,0 +1,159 @@
+CS 214 / Files & file system
+============================
+
+Reading a file has (at least) two parts:
+    - read file and generate items of interest (producer)
+    - making use of these items (consumer)
+
+how can we organize a producer and consumer?
+
+- don't make a distinction: same function reads files and uses items
+    - simple to understand organization
+    - no need to persist state (local variables are sufficient)
+    - potentially complicated function
+    - leads to code duplication
+
+- producer-driven (enumerator)
+    producer has main loop
+        calls a function for the consumer each time an item is found
+
+- consumer-driven (iterator)
+    consumer has main loop
+        calls a function to obtain the next item
+
+- separate threads for producer and consumer
+    requires multithreading
+    more on this later
+    
+
+persistant vs ephemeral
+- how long do the data items (e.g. strings) exist?
+- who is responsible for deallocating them?
+
+a persistent system creates items that live indefinitely
+    - consumer must (eventually) deallocate them
+
+an ephemeral system creats items that only live until the next item
+    is produced
+    - producer will deallocate them
+
+difference between these is mostly a matter of preference
+    - persistent system requires more allocation/deallocation
+    - ephemeral system requires more discipline (can't use items once
+        the next one is created)
+
+
+
+file system
+-----------
+
+how do we refer to files?
+
+at the user level, we refer to files by name (path)
+    path describes how to find a file by listing all the directories
+        that contain it
+        
+    /path/to/some/file
+
+internally, files are identified by number (inode ID)
+    this does not change if we move/rename a file
+    
+I-Node stores (some) metadata about a file
+    - in Unix-style file systems, i-nodes are stored in an array
+    - ID acts as an index into this array
+
+the I-node says where to find the contents of the file on disk
+
+requirements
+    - fixed size for i-nodes (required for fast access)
+    - we want to be able to represent very large files
+    - we want to be able to represent small files efficiently
+    - we can't require files be made of contiguous blocks
+    - we want fast random access to every part of the file
+    
+solution:
+    - locations of first 10 blocks are stored directly in i-node
+    - single indirect
+        e.g., a block containing references to the next 100 blocks
+    - double indirect block
+        e.g., a block containing references to 100 indirect blocks
+            so 10,000 additional blocks
+    - triple indirect block
+        e.g., a block containing references to 100 double indirect blocks
+            so 1,000,000 additional blocks
+
+what else is stored in the i-node?
+- size of the file (in bytes and in blocks)
+- owner and group information and permissions
+- timestamps (created, modified, accessed)
+
+
+note that the file's name is not stored in the i-node
+    -> after all, the i-node has limited space and file names can be long
+
+file names are stored in the directories
+
+a directory is a special file that stores information about files
+    name (not path)
+    i-node identifier
+    maybe some other information
+    
+how to access a file /foo/bar/baz
+    1. open / directory file (file system stores its location)
+    2. scan that directory and look for "foo"
+    3. open /foo directory file
+    4. scan for "bar"
+    5. open /foo/bar directory file
+    6. scan for "baz"
+
+when we call open("/foo/bar/baz", ...), the OS does this lookup for us
+
+note that file names identify files, but are not part of the file itself
+
+-> this allows us to have files with more than one name
+
+ln <existing_file> <new_name>
+
+    if we have a file foo and do
+        ln foo bar
+    now foo and bar both refer to the same i-node
+    
+the i-node tracks how many names refer to a file
+
+when we remove a file, we unlink the name from the file
+    this reduces the number of names for that file
+    when the count reaches zero, the file is deleted
+        (technically it is no names and no processes having it open)
+        
+
+symbolic links
+--------------
+
+"hard" links connect a file name to an i-node
+"symbolic" or "soft" links connect a name to another name
+
+a symbolic link is a special file that contains a path
+    when you open a symbolic link, the OS will open the linked file instead
+
+
+    ln -s <existing_file> <link_name>
+
+unlike hard links, softlinks can be broken
+    attempting to open a broken link will result in an error
+
+if we replace a file with a new one with the same name, the soft link
+    will refer to the new file
+    
+
+note: you can create soft links to directories
+    new names for existing directories are usually not allowed
+        (things like . and .. become ambiguous)
+        
+ 
+
+
+
+
+            
+
+

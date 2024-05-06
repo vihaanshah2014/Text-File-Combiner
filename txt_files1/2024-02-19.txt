@@ -1,0 +1,64 @@
+CS 214 / Reading files
+======================
+
+Late assignment submission:
+    each day late, your score is reduced by 10 points
+    this is not pro-rated
+        if you can't make the deadline, get some sleep
+    the late penalty will not reduce your score below 60
+
+the README
+    - both partners' names and netIDs
+    - any additional information needed to compile and run your test cases
+        - e.g., how to use your test program(s)
+    - design notes
+    - your test plan/testing strategy
+    - description of your performance tests and why you chose them
+
+
+Posix file IO
+-------------
+
+open() opens a file for reading and/or writing
+    returns a file number (file descriptor)
+    
+read() obtains data from a file and writes it to memory
+write() obtains data from memory and writes it to a file
+
+read and write are system calls, so there is an overhead
+    we use large buffers to amortize this cost
+    
+
+when we call read, we have to specify how much data to read (in bytes)
+
+if we are reading a binary file, the format may indicate how many
+bytes to read
+
+    fd = open(data_file, O_RDONLY);
+    if (fd < 0) { .... }
+    
+    int n;
+    int *p;
+    int bytes;
+    
+    bytes = read(fd, &n, sizeof(int));
+    if (bytes < sizeof(int)) { ... }
+    
+    p = (int *) malloc(n * sizeof(int));
+    bytes = read(fd, p, n * sizeof(int));
+    if (bytes < n * sizeof(int)) { ... }
+    
+
+
+for text data, the units of data we are interested are variable-length
+    (lines, words, etc.)
+
+general idea: pick a buffer size,
+    read that many bytes
+    go through the buffer and look for units
+    
+    issues: buffer may contain a partial unit
+        unit may be bigger than the buffer
+        
+        
+Code examples posted on Canvas under Source Code/lines

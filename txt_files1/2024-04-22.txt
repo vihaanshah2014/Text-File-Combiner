@@ -1,0 +1,113 @@
+CS 214 / Application example
+============================
+
+Schedule:
+April 29: review for final exam
+Final Exam: Monday, May 6
+    On-line via Canvas
+    Available for 24 hours
+    If you have two other exams on May 6, contact me
+        put [CS214] Exam Conflict as your subject
+
+
+The Ghost of Project IV
+-----------------------
+
+on-line video game server for rock-paper-scissors
+
+Application
+Presentation
+Session
+
+Transport  -- these already exist (we are using TCP/IP)
+Network
+Data Link
+Physical
+
+
+
+What roles are there?
+    Server - waits for connection requests
+        - associates players with game instances
+        - determines who wins/loses
+    Client - initiates connections
+        - represents a player
+        
+
+one connection per client per game session
+
+    a game session may contain multiple RPS rounds
+    game session ends when one client decides to quit
+    
+
+what kinds of messages are needed?
+
+    server should say when to move
+    clients should say what moves they are making
+    server should say who won/lost/drew
+    clients should say whether they want to continue
+    
+    client initiates communication 
+        - can be minimal, or contain some information
+            - client name, preferred game variant
+            - protocol version
+    server acknowledges this
+        - indicates acceptable info from client
+        
+        
+    Client      Server
+        -- PLAY ->
+        <- WAIT --
+        
+        <- BEGIN --
+        -- MOVE -->
+        <- RESULT --
+        
+        -- QUIT/CONTINUE ->
+    
+    need to decide how to handle inappropriate messages
+        - messages sent by the wrong participant
+        - messages sent at the wrong time
+    
+    possible responses:
+        - shut down connection
+        - send error message and shut down connection
+        - send error message and try to recover
+        
+
+Presentation:
+    for today, extremely simple:
+    all messages are one byte
+
+    (useful for a proof-of-concept, rough draft protocol)
+    
+    
+server design
+-------------
+
+How can we test our server?
+
+- for testing, we can build a simple client that doesn't assume
+  the server is correct
+  
+
+how should the server be structured?
+
+    - one thread that handles everything
+    - one thread per connection (=> two threads per game)
+    - one thread per game (=> two connections per game thread)
+    
+
+idea: central thread repeatedly calls accept()
+    once two connections have started, it spawns a thread to manage 
+        the game session
+
+
+
+
+
+        
+    
+
+
+    

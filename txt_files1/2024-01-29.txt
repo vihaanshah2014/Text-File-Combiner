@@ -1,0 +1,245 @@
+CS 214 / Objects and Memory
+===========================
+
+An object is a location in memory where we can store data
+
+Three categories
+- static objects
+	- global variables
+	- string literals
+	- code
+- stack objects
+	- local variables
+	- other information about functions used by the runtime
+- heap objects
+	- created by calls to malloc()
+	- destroyed by calls to free()
+	- not associated with a variable
+
+static objects exist the entire time the program runs:
+	they are neither created nor destroyed
+
+stack objects are associated with a particular function call
+	created when the call begins
+	destroyed when the call ends
+	
+the size of a heap object can be decided at run-time
+
+any object can be referred to indirectly, using a pointer
+only static and stack objects can be referred to directly
+	(without a pointer)
+	
+
+to use an object, we need to know its address and its type
+	the compiler tracks the types and locations of variables
+	
+	for indirect references:
+		the value of the pointer says its address
+		the type of the pointer indicates the type of object
+
+pointer:
+	a typed address (note: type is only known during compilation)
+	
+there is a special pointer: NULL
+	NULL represents "no address"
+	attempting to dereference NULL will cause a memory error
+
+void pointers (void *)
+	"untyped" pointers
+	all we can do with these are 
+		- compare for equality
+		- cast to some other pointer type
+			(it is your responsibility to make sure the type
+			you cast to is reasonable!)
+		- use with various functions
+
+an example of void * shenanigans
+	float f;
+	void *v = &f;
+	int *p = v;
+	*p = 3;
+	(do not do this)
+
+
+arrays vs array variables
+
+when we declare an array variable, we must specify the dimension
+	int a[20];
+		// a directly refers to an array object
+	
+	a by itself is effectively a pointer
+	
+		*a = 5;  is the same as a[0] = 5;
+		
+	we cannot reassign a to refer to a different array
+	
+	int b[30];
+	a = b;      // nope
+	
+we can make pointers point to arrays
+
+	int *p = a;
+		// p is a pointer variable
+		// it initially holds the address of a
+		
+	we can still use array indexing with p!
+	
+		p[1] = 20;   same as a[1] = 20
+			also the same as *(p + 1) = 20
+			also the same as *(a + 1) = 20
+			but why use those when p[1] is more readable?
+
+	this sort of indexing is only defined when
+		- the pointer points to an array
+		- the index is within the bounds of the array
+
+	p = &a[5];
+		now p[0] refers to the same int as a[5]
+		p[1] is the same as a[6]
+		p[-1] is the same as a[4]
+		
+pointer arithmetic
+
+	if p points to something
+	p+1 points to the "next thing" in memory
+		(the actual address we get depends on the type of p)
+		
+	p-1 points to the "previous thing" in memory
+	
+	pointer arithmetic is only valid with pointers into an
+		array, where the indexing leaves us within the array
+		
+pointer vs array variables
+	array variables always point to a specific array
+		pointer variables can be changed at any time
+		
+	pointer variables store their address at run-time
+		array variables have a fixed address
+		
+	&a is the same as a
+		&p is a pointer to a pointer variable
+		
+		
+		
+int n;
+int *p = &n;
+int **q = &p;
+
+		n, *p, and **q all refer to the same object (n)
+
+
+the heap
+--------
+
+use malloc() to create objects on the heap
+
+	void *malloc(size_t);
+	
+	we tell malloc how many bytes we need
+	malloc allocates an object and returns a pointer
+		or returns NULL if it can't get enough space
+
+int n = get_dimension_from_user();
+int *p = malloc(n * sizeof(int));
+	// we know that p points to an array of n ints (or NULL)
+	// the compiler does not know this, but it trusts us
+
+
+if malloc succeeded, we can treat p like any other array
+
+	p[10] = p[5] + 1;
+	
+	
+do we need to explicitly cast the pointer from malloc()?
+	we aren't required to
+	
+int *p = malloc(size);            // ok
+int *p = (int *) malloc(size);    // also ok
+
+
+p = malloc(newsize * sizeof(int));           // ok
+p = (int *) malloc(newsize * sizeof(int));   // maybe better?
+	// the second one can protect me in case I use the wrong
+	// pointer variable
+
+
+nothing protects you from calling malloc with an incoherent size
+
+double *p = malloc(dimension * sizeof(int));
+	// probably a mistake
+
+double *p;
+...
+p = malloc(dimension * sizeof(int));
+	// probably a mistake, but harder to tell
+	// an explicit cast here can make the mistake easier to find
+	
+
+
+struct node {
+	data_t payload;
+	struct node *next;
+};
+
+struct node *head = NULL;
+
+void push(data_t item)
+{
+	struct node *new = malloc(sizeof(struct node));
+	
+	// (*new).payload = item;
+	new->payload = item;
+	new->next = head;
+	head = new;
+}
+
+free() deallocates an object on the heap
+
+	void free(void *);
+	
+	free can only be used with addresses returned by malloc()
+	
+	int *p, *q;
+	
+	p = malloc(20 * sizeof(int));
+	q = p;
+	
+	what do we need to deallocate the array?
+		1. free(p);
+		2. free(q);
+		3. free(p); free(q);
+
+	1 and 2 both deallocate the array, because p and q hold
+		the same pointer
+	3 is wrong (double freeing)
+	
+	also wrong: free(p+10);
+		p+10 points to a valid int object, but it isn't
+			the object allocated by malloc()
+
+int pop(data_t *dest)
+{
+	if (head == NULL) return 0;
+	
+	struct node *oldhead = head;
+	if (dest)  *dest = head->payload;
+	head = head->next;
+	free(oldhead);
+}
+
+typedef struct node list_t;
+
+
+typedef struct {
+    data_t payload;
+	list_t *next;    // doesn't work because list_t isn't defined yet
+} list_t;
+
+typedef struct node {
+	data_t payload;
+	struct node *next;
+} list_t;
+
+
+
+

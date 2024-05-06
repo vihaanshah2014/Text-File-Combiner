@@ -1,0 +1,255 @@
+CS 214 / Deadlock, semaphores
+=============================
+
+key idea: sequential access to shared mutable resources
+
+key question: what should be sequential?
+    how much sequencing do we need?
+        making too many things sequential leads to poor performance
+        not making enough things sequential leads to data races
+            -> incomprehensible behavior
+
+
+some strategies:
+    limit mutual exclusion to individual independent resources
+    limit critical sections (i.e., portions of code that require exclusive access)
+    
+    attempt to divide larger structures
+        -- difficult to know when substructures are sufficiently independent
+
+
+    divide accesses by type
+        read/write lock - allows multiple readers, or one writer exclusively
+
+
+deadlock
+--------
+
+recall last week:
+
+    typedef struct {
+        int balance;
+        pthread_mutex_t lock;
+    } account_t;
+    
+    
+    void transfer(account_t *dst, account_t *src, int amount)
+    {
+        pthread_mutex_lock(&src->lock);
+        pthread_mutex_lock(&dst->lock);
+        
+        src->balance -= amount;
+        dst->balance += amount;
+        
+        pthread_mutex_unlock(&dst->lock);
+        pthread_mutex_unlock(&src->lock);
+    }
+    
+    account_t X, Y;
+    
+    thread A                thread B
+    --------                --------
+    transfer(Y, X, 1)       transfer(X, Y, 2)
+    lock(X->lock)           lock(Y->lock)
+    lock(Y->lock)           lock(X->lock)
+        blocks                  blocks
+
+each thread is blocking the other from proceeding
+
+
+four conditions for deadlock
+
+1. mutual exclusion
+2. hold-and-wait
+    it is possible to block trying to acquire a resource while holding
+    another resource
+3. no preemption
+    if a thread has exclusive access, no other thread can force it to
+    release the access
+4. circular wait
+    e.g., A waits for B, B waits for A
+
+
+to avoid deadlock, make sure at least one of these conditions will not
+apply
+
+e.g., not allowing multiple locks avoids hold-and-wait
+
+always acquire locks in the same order to avoid circularity
+    in our example above, we would have no problem if both threads tried
+    to lock X first
+
+
+we can design higher-level abstractions (called monitors) to manage
+locks in a way that avoids deadlock
+
+
+
+note: deadlock does not require threads
+    any two communicating processes can deadlock
+
+
+barriers
+--------
+
+abstraction that creates a "rendezvous" 
+    a point where all threads wait until every thread has reached that
+    point
+    
+
+
+https://pubs.opengroup.org/onlinepubs/009696899/functions/pthread_barrier_wait.html
+
+
+pthread_barrier_t
+
+int pthread_barrier_init(pthread_barrier_t *bar,
+    pthread_barrierattr_t *attr,
+    unsigned count);
+        count indicates how many threads must wait at the barrier before
+        any of them can advance
+
+int pthread_barrier_destroy(pthread_barrier_t *bar);    
+
+int pthread_barrier_wait(pthread_barrier_t *bar);
+        block until the required number of threads have called wait
+
+
+    for (...) {
+    
+        // do stuff
+        
+        pthread_barrier_wait(&bar);
+    }
+    
+
+semaphore
+---------
+
+two operations
+    post / increment
+    wait / decrement
+
+we can think of a semaphore as an integer,
+    perhaps representing the number of available resources
+    
+post increases the integer by 1
+wait decreases the integer by 1, if it is positive
+    if the integer is 0, it blocks until the integer becomes positive
+
+
+a mutex is a semaphore whose maximum value is 1
+
+    mutex       semaphore
+    -----       ---------
+    init()      init(1)
+    locked      1
+    unlocked    0
+    lock()      wait()
+    unlock()    post()
+
+a condition variable can also be a semaphore
+
+    cond.var    semaphore
+    --------    ---------
+    init()      init(0)
+    wait()      wait()
+    signal()    post()
+
+    ...almost
+    signalling a condition variable when no thread is waiting has no effect
+    posting to a semaphore always raises its value
+
+The Little Book of Semaphores
+
+
+#include <semaphore.h>
+
+sem_t
+
+int sem_init(sem_t *sem, int pshared, unsigned int value);
+    initialize semaphore with specified initial value
+    pshared is normally 0
+
+int sem_wait(sem_t *sem);
+int sem_post(sem_t *sem);
+
+typedef struct {
+    int first;
+    int last;
+    int size
+    data_t *data;
+    sem_t lock;
+    sem_t empty;
+    sem_t full;
+} queue_t;
+
+void q_init(queue_t *q, int capacity)
+{
+    q->first = 0;
+    q->last = 0;
+    q->size = capacity;
+    q->data = malloc(sizeof(data_t) * capacity);
+    sem_init(&q->lock, 0, 1);   // mutex initially unlocked
+    sem_init(&q->empty, 0, capacity);  // all spots are empty
+    sem_init(&q->full, 0, 0);  // no spots are full
+}
+
+
+void q_enqueue(queue_t *q, data_t item)
+{
+    sem_wait(&q->empty);
+    
+    sem_wait(&q->lock);
+    
+    q->data[q->last] = item;
+    q->last++;
+    if (q->last == q->size) q->last = 0;
+    
+    sem_post(&q->lock);
+    
+    sem_post(&q->full);
+
+}
+
+void q_dequeue(queue_t *q, data_t *dst)
+{
+    sem_wait(&q->full);
+    
+    sem_wait(&q->lock);
+    
+    *dst = q->data[q->first];
+    q->first++;
+    if (q->first == q->size) q->first = 0;
+    
+    sem_post(&q->lock);
+    
+    sem_post(&q->empty);
+}
+
+
+
+major differences with semaphores
+
+    in general, any thread can post to any semaphore
+        mutexes have more restrictive rules, so it's easier to see when
+        they are being misused
+
+    more possible states
+        e.g., we can count the number of available resources
+
+    semaphores can simulate condition variables, but work is needed
+        to handle broadcast or to "lose" signals when no thread is waiting
+
+posix-specific differences
+
+    sem_post and sem_wait are "safe" to use in signal handlers
+    
+    semaphores can be shared among multiple processes
+        sem_open() associates a sem_t object with a semaphore file
+            in the file system (accessible by multiple processes)
+
+
+Possible tools:
+    thread sanitizer   -fsanitize=threads
+        can't be used with address sanitizer

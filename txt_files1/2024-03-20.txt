@@ -1,0 +1,201 @@
+CS 214 / Signals
+================
+
+Interrupts
+----------
+
+normal operation for the CPU is the "fetch-execute cycle"
+
+    loop:
+        obtain next instruction from memory
+        decode instruction
+        execute instruction
+    
+"interrupts" are a way to break out of this cycle
+
+    stops fetch-execute cycle and saves state
+    executes some other code (based on what kind of interrupt)
+    that code may tell CPU to resume what it was doing before
+
+used for many purposes
+    - preemptive multitasking
+    - dealing with errors (division by zero, segmentation violations, etc.)
+    - handling incoming data
+    - on some architectures, system calls
+    - timers
+
+key point: interrupts can happen at any time (asynchronous)
+
+
+signals
+-------
+
+a way to communicate with a process asynchronously
+
+- a process can receive a signal at any time
+    - could be sent by OS, other processes, hardware
+
+signals come in several types
+
+    for each signal, there is a default "disposition"
+    each process can override these dispositions
+    
+possible dispositions:
+
+    - ignore
+    - terminate
+    - terminate and dump core
+    - stop
+    - call a signal handler
+        - can terminate process
+        - can execute code
+        - can resume process
+
+some common signals
+
+SIGTERM   - default for the kill command
+SIGINT    - sent by terminal after ^C
+SIGHUP    - sent by terminal when user logs out
+SIGQUIT   - sent by terminal after user types quit code
+
+SIGKILL   - available from kill command (terminates program without recourse)
+
+SIGABRT   - caused by abort()
+
+
+SIGSTOP   - stops program
+SIGTSTP   - stops program, sent by terminal after ^Z
+
+SIGCONT   - continues stopped program
+
+error conditions:
+
+SIGFPE    - floating-point exception
+SIGSEGV   - segmentation violation
+
+man 7 signal
+    - information about most signal types
+
+
+two functions for changing a process's disposition for a signal type
+
+#include <signal.h>
+
+typedef void (*sighandler_t)(int);
+
+sighandler_t signal(int signum, sighandler_t handler);
+
+    takes a signal number (usually given with a macro like SIGHUP)
+    and a pointer to a signal handler function,
+        or one of two constants
+    
+        SIG_IGN   - set disposition to ignore
+        SIG_DFL   - reset disposition to the default
+    
+    returns the previous disposition
+
+    
+example: ignoring SIGHUP
+
+    signal(SIGHUP, SIG_IGN);
+    
+example: setting a handler function
+
+    signal(SIGINT, int_handler);
+    
+    (but it is recommended to use sigaction() to set a handler function)
+
+
+the more powerful function is sigaction()
+
+int sigaction(int signum, struct sigaction *new, struct sigaction *old);
+
+    uses new to set the disposition for signum
+    if old is non-NULL, writes the current disposition to it
+    
+the sigaction struct allows us to specify a handler function
+    (in one of two styles) and information about how the signal should
+    be handled
+
+
+
+signal handlers
+---------------
+
+a function that you never explicitly call
+
+    - it is called asynchronously when its signal arrives
+
+when the signal arrives, the interrupt logic in the OS simulates
+a call to the signal handler
+    - if the signal handler returns normally, the program will
+      proceed from where it was before the signal arrived
+
+this is problematic for signals caused by CPU errors (SIGFPE, SIGSEGV, etc.)
+because the handler would return back to the same instruction that
+triggered the signal
+    - we must terminate the program, or use some method to skip ahead
+        (in C, we can use setjmp() and longjmp() to make exception handlers)
+    
+not all functions are safe to call inside a signal handler
+
+    most C IO functions are not allowed (printf, scanf, etc.)
+    
+    see man 7 signal-safety for a list of safe functions
+
+
+
+what happens if you get a signal while you are in a signal handler?
+
+you may want to do different things
+    probably don't want the same signal handler to run
+    
+    temporarily restore the default disposition for that signal
+    temporarily block the signal (and possibly other signals)
+
+
+blocking a signal stops it from arriving, but allows it to arrive later
+    (when that signal number is unblocked)
+
+sigprocmask() allows us to learn/change the current "signal mask"
+    (set of blocked signals)
+
+
+sending a signal
+----------------
+
+"kill" on the command line
+
+    kill [-SIGNAME] PID
+
+we can specify a signal type, or get SIGTERM by default
+
+
+int kill(pid_t pid, int signum);
+
+    sends a signal to a specified process (or process group)
+
+
+int raise(int signum);
+
+    sends a signal to the current process
+
+
+
+    
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
