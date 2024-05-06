@@ -1,0 +1,195 @@
+CS 214 / Project, file IO
+=========================
+
+run-time errors
+    improper use of the library which your code must detect
+    - malloc too much memory, free a bad pointer
+    
+    mymalloc should return NULL and print an error message
+    myfree should do nothing and print an error message
+        or print an error message and terminate the program (EXIT_FAILURE)
+        
+
+programming mistakes
+    errors in your library code that you should detect and fix
+    
+    reason about your code and run tests to increase your confidence
+        that your code is correct
+    
+    coming up with a testing strategy
+    1. think of requirements that your program/library must satisfy
+        - library must detect and report the run-time errors above
+        - mymalloc should allocate memory on your heap
+        - myfree should deallocate memory on your heap
+    
+    2. think how you would know if these requirements were violated
+        - if we allocate all of memory, we shouldn't be able to allocate more
+    
+    3. write specific test cases/test programs
+        - write a program that allocates e.g. 4088 bytes, then
+            tries to allocate 100 bytes (expected to fail)
+        - write a program that allocates all of memory, frees it,
+            and then allocates again (expected to succeed)
+
+----
+
+int main(int argc, char **argv)
+{
+    int test = atoi(argv[1]);   // FIXME
+    int n;
+    char *p;
+    
+    switch (test) {
+    
+    case 1:
+        free(&n);
+        break;
+    
+    case 2:
+        p = malloc(25);
+        free(p);
+        free(p);
+        break;
+        
+    case 3:
+        p = malloc(25);
+        free(p + 10);
+        break;
+        
+    }
+    
+    return EXIT_SUCCESS;
+}
+
+
+----
+
+performance testing
+    gauge the efficiency of our code
+    
+    memgrind.c is intended to test your code efficiency
+        write test cases that you would expect poor performance for
+    
+    way to get average time/test
+        - get the current time (start time)
+        - run test 50 times
+        - get the current time (stop time)
+        - compute elapsed time (stop time - start time)
+        - average time = elapsed time (in ms) / 50
+
+
+use make to simplify your life
+
+
+test: test-program
+    ./test-program
+    
+test2: test-program
+    ./test-program > test2.out
+    diff test2.out test2.ref
+
+
+useful/recommended compiler options
+
+    -g          enables debugging information/symbol tables
+    -Wall       emit most useful warning messages
+    -Wvla       emit warnings for variable-length arrays
+    -std=c99    disable GCC extensions and C2011 features
+    
+    -fsanitize=address    compile with address sanitizer (ASan)
+    -fsanitize=undefined  compile with undefined behavior sanitizer (UBSan)
+        -fsanitize=address,undefined
+    
+    -O   optimize code
+    -O2  optimize code more
+
+
+
+
+file IO
+-------
+
+a file in Unix is a stream of bytes
+    prior to unix, mainframe OSes defined files a sequences of records
+-> byte streams are more flexible and general, but require more
+    work for the program itself
+
+
+Unix generalizes the file interface to work with all byte streams
+- actual files on disk
+- console input/output
+- other IO devices
+- inter-process communication (IPC)
+- network communication
+
+all of these share the idea of sending/receiving a stream of bytes
+
+there are some specific differences
+- some files may be read-only or write-only
+- some files may allow random access
+
+in C, we have two sets of file functions
+
+C language standard provides
+    fopen, fclose, fread, fwrite, fscanf, fprintf
+    indicate file using FILE *
+    buffered
+    part of <stdio.h>
+    
+POSIX operating system standard provides
+    open, close, read, write, lseek
+    work with file descriptors
+    not buffered
+    lower-level (these functions directly correspond to syscalls)
+    more general
+    part of <unistd.h>, <fcntl.h>
+
+a file descriptor is an integer
+    the run-time system maintains a table of all open files
+        the descriptor is an index into that table
+        -> this table is also kept by the OS
+    
+    typically:
+        0 is standard input (STDIN_FILENO)
+        1 is standard output (STDOUT_FILENO)
+        2 is standard error (STDERR_FILENO)
+        
+    fileno() returns the file descriptor used by a FILE
+    fdopen() creates a FILE for a file descriptor
+
+
+buffering
+    problem: communicating with a file is a system call (syscall)
+        -> OS calls are more expensive than normal function calls
+        -> require a "context switch"
+    
+    if we are reading a file byte-by-byte, we don't want to do a syscall
+        for every byte
+    instead, we request a bunch of bytes at once and store them in
+        an array (called a buffer)
+        
+    for writing, we collect bytes in a buffer and then send them all
+        at once
+
+the FILE struct contains an internal buffer
+    individual calls write to the buffer
+    when the buffer is full, the whole buffer is "flushed" to the OS
+        exceptions: a FILE can also be line buffered (flush whenever
+            a newline is written) or non-buffered (flush after the
+            fprintf is done)
+            
+    fflush() forces a buffer to flush
+    you can lose data if your program crashes with unflushed data
+        in a buffer
+
+the posix functions do not have an internal buffer:
+you buffer your own data
+    read() and write() accept arrays of bytes to write to/read from
+    
+ssize_t read(int fd, void *buffer, size_t n);
+    asks OS to write up to n bytes into the array at buffer
+    returns the number of bytes read
+    returns 0 at end of file
+    returns -1 for error conditions
+
+    

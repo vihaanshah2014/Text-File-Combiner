@@ -1,0 +1,69 @@
+CS 214 / Reading files
+======================
+
+Late assignment submission
+    - Canvas is the arbiter of time
+    - submit by 11:59 PM
+    - late penalty is 10 points per day
+        this is not pro-rated
+        if you can't make the deadline, don't stay up all night
+    - late penalties will not reduce your score below 60
+
+What goes in the README
+    - name and netID of both partners
+    - any additional information needed to compile and run your program(s)
+        - e.g., what arguments your test programs take
+    - design notes
+    - testing plan/strategy
+        briefly note your requirements and how you checked them
+            and why
+    - your two performance tests
+        what are they and why did you pick them?
+        did you learn anything?
+
+
+reading files
+-------------
+
+open() is used to open a file
+    it returns a file number (file descriptor)
+
+read()  reads data from a file and copies it to a buffer
+write() reads data from a buffer and writes it to a file
+    both read and write are system calls
+    -> inherent overhead from calling into the OS (context switch)
+    -> we use buffers to amortize the cost per byte
+
+when we are reading from a file, how much should we read?
+
+for binary formats, the format may be divided into portions of a known
+    length
+
+
+    int fd = open(data_file, O_RDONLY);
+    if (fd < 0) { ... }
+    
+    int n, *p, bytes;
+    
+    bytes = read(fd, &n, sizeof(int));
+    if (bytes < sizeof(int)) { .... }
+    
+    p = (int *) malloc(n * sizeof(int));
+    bytes = read(fd, p, n * sizeof(int));
+    if (bytes < n * sizeof(int)) { ... }
+
+
+when dealing with text, we don't have fixed length units
+    lines, words, etc. can be any length
+
+strategy:
+    choose a convenient buffer size
+    read data from a file
+    search buffer for the things we are looking for
+    
+    issues:
+        partial units at the end of the buffer
+        units may be longer than the buffer
+
+
+Code examples posted on Canvas under Source Code/lines

@@ -1,0 +1,140 @@
+CS 214 / Server structure
+=========================
+
+Recap: establishing TCP connections
+
+two sides: 
+    - listener waits for connection requests
+    - active side requests connection from listener
+    
+incoming packets are associated with a particular connection by looking at
+    - sender host:port
+    - recipient host:port
+    
+examples:
+    three machines: A (listener), B and C connect to A
+        A listens for connection requests on port 15000
+        B and C can use any port numbers on their side (maybe the both use 100)
+        
+        A-B : to A:15000, from B:100
+        A-C : to A:15000, from C:100
+        
+    because the sender addresses are different, A can tell which packet
+    goes with which connection
+    
+    two machines: A (listener), B connects to A twice
+        A listens for connection requests on port 15000
+        first B connection uses port 100
+        second B connection uses port 101
+        
+        first connection: to A:15000, from B:100
+        second conection: to A:15000, from B:101
+        
+establishing a connection to an existing listener
+
+recommended: getaddrinfo()
+    - works with IPv4 and IPv6 without writing protocol-specific code
+    - avoid worrying about network byte order
+    
+
+    socket() - gives us a file descriptor to use
+    connect() - establishes connection to remote host (listener)
+        
+    read() - receive bytes from remote host
+    write() - send bytes to remote host
+    
+    socket-specific variants: recv() and send()
+    for datagrams: recvfrom() and sendto()
+        (but we would not use connect())
+
+    close() - closes both streams
+    shutdown() - closes one stream
+    
+    
+establishing a port listening for incoming connection requests
+
+recommended: getaddrinfo()
+    - allows us to work with IPv4 and IPv6 transparently
+    - in our hints, include the flag AI_PASSIVE
+    - use NULL for the node (indicates we want a port on our machine)
+    
+    socket() - gives us a file descriptor for listening
+    bind()   - associates the socket with a specific port
+    listen() - tells network stack we will be waiting for connection requests
+    
+    
+    accept() - receives incoming connection requests
+        - blocks until request received
+        - returns a new socket for that connection
+      
+        
+
+server strategies
+-----------------
+
+"one at a time"
+
+repeat forever:
+    accept incoming connection
+    communicate with client
+    close connection
+    
+
+- very simple (no concurrency)
+- can only handle one client at a time (no concurrency)
+
+
+multiple processes
+
+repeat forever:
+    accept incoming connection
+    fork
+        in child: communicate with client, then terminate
+    close connection
+
+- multiple concurrent connections
+- one process per connection
+    - one process crashing does not affect other processes
+    - communication can be cumbersome
+
+- problem: dealing with zombies
+    - calling wait() before accept() means we can't get a new connection
+      until the last one ended - but this is just one at a time again
+      
+    - one possibility: install a handler for SIGCHLD that reaps the child
+        use the 3-argument signal handler form to get PID of terminated child
+        use waitpid() to reap that specific process
+        - good if we want to get exit status from children
+
+    - other possibility: set disposition for SIGCHILD to SIG_IGN
+        this prevents child processes from becoming zombies
+        (they disappear from the process table as soon as they terminate)
+
+
+multiple threads
+
+repeat forever:
+    accept incoming connection
+    spawn thread to deal with client
+    detach thread
+    
+
+- multiple concurrent connections
+    - each thread handles its own connection state
+- simpler communication between threads
+- one thread can crash the entire process
+
+may have to think about signals
+    problem: in a multithreaded process, signals can be handled by any
+        thread chosen at random
+    - unless we use signal masks to limit which threads can receive the
+        signal
+        
+    solution: have main thread unblock e.g. SIGINT, but all other
+        threads block SIGINT
+        - this means the main thread will receive any SIGINT signals
+
+
+multiplexing
+allows concurrent connections with fewer threads than connections
+poll() or select()

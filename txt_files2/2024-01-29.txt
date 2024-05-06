@@ -1,0 +1,235 @@
+CS 214 / Objects and memory
+===========================
+
+No recitation today or tomorrow
+Recitations MAY begin on Wednesday; look for an announcement if so
+
+
+Project I will be assigned within the next 7 days
+
+Objects
+-------
+
+An object is a region of memory that we use to store data
+
+- static objects
+    - global variables
+    - string literals (read only)
+    - code (read only)
+- stack objects
+    - local variables
+    - information about active functions (e.g., saved registers, return address)
+- heap object
+    - dynamic data structures
+    
+    
+static objects exist the entire time the program runs
+    they are neither created or destroyed
+
+
+stack objects are tied to the lifetime of a particular function call
+    created when function is called
+    destroyed when function returns
+    
+heap objects are explicitly created and destroyed
+    malloc() creates (allocates) an object
+    free() destroys (deallocates) an object
+    unlike static and stack objects, the size and number of heap objects
+        is dynamic
+
+
+to use an object, we need to know its location and its type
+    location says where in memory to look
+    type says how much data to get and what to do with it
+    
+static and stack objects are associated with variables
+    the compiler tracks the location and type of each variable's object
+    
+heap objects are not associated with a variable, so we have no way
+    to directly refer to them
+    
+
+pointers allow us to indirectly refer to an object
+    value of a pointer gives the location of the object
+    type of the pointer gives the type of the object
+
+dereferencing a pointer allows us to work with the object it points to
+
+    int n;
+    &n
+    int *p = &n;
+            // p indirectly refers to n
+            // *p is the same as n
+            
+    &p - address of p's object
+    int **q = &p;
+    
+            // *q is the same as p
+            // **q is the same as n
+            
+
+arrays
+------
+
+
+    int a[20];  // a directly refers to a stack object (array of 20 ints)
+    
+        a[0]  - directly refers to the first integer in a
+        
+        a  - evaluates to the address of the array
+        &a - also evaluates to the address of the array
+    
+        *a - directly refers to the first integer in a
+    
+
+    int *p;  // declares a pointer variable
+    p = a;   // now *p and a refer to the same array object
+    
+        p     - indirectly refers to first element in a
+        p[0]  - directly refers to first element in a
+        *p    - directly refers to first element in a
+        
+        p[5]
+        
+        p  - evaluates to address of a
+        &p - evaluates to address of p
+
+
+    p = &a[5];  // now p points to a different integer
+    
+        p[0]   - same as a[5]
+        p[1]   - same as a[6]
+        p[-1]  - same as a[4]
+    
+        array indexing can be used with a pointer when
+            - the pointer points to part of an array
+            - the index lies within the bounds of the array
+
+
+    int n = get_dimension_from_the_universe();
+    p = (int *) malloc(n * sizeof(int));
+
+        // p points to an object on the heap that can store n ints
+        // or p is NULL, if malloc() couldn't find space
+        
+        // an object with space for n ints is indistinguishable from
+        // an array of n ints
+        
+do we need to cast the void pointer from malloc?
+ - no, because void pointers automatically promote to any pointer type
+ 
+
+int *p = malloc(n * sizeof(int));          // ok
+int *p = (int *) malloc(n * sizeof(int));  // also ok, maybe redundant
+
+
+p = malloc(m * sizeof(int));          // ok
+p = (int *) malloc(m * sizeof(int));  // also ok, maybe safer
+
+
+
+
+double *q = malloc(n * sizeof(int));
+    // valid C, almost certainly a bug
+    
+    
+
+q = malloc(n * sizeof(int));
+    // probably a bug, but hard to see
+    
+q = (int *) malloc(n * sizeof(int));
+    // triggers a type error (int * and double * are incompatible)
+
+q = (double *) malloc(n * sizeof(int));
+    // no type error, but obviously wrong
+
+
+pointer arithmetic
+    we can add/subtract integers to/from a pointer
+    this gives us a new pointer
+        the new pointer will be offset by some number of data items
+        depending on its type
+        
+    int *p;
+    p + 1  // indirectly refers to the integer after *p
+    p - 1  // indirectly refers to the integer before *p
+    
+    p + 1 is the same as &p[1]
+    
+    p[1] is the same as *(p + 1)
+        also the same as *(1 + p)
+        meaning it is the same as 1[p]
+        
+    pointer arithmetic is only meaningful if we have a pointer into
+        an array, and the result of the arithmetic is within the
+        same array
+
+
+struct node {
+    data_t payload;
+    struct node *next;
+};
+
+struct node *head = NULL;
+
+void push(data_t item)
+{
+    struct node *new = malloc(sizeof(struct node));
+    
+    // (*new).payload = item;
+    new->payload = item;
+    new->next = head;
+
+    head = new;
+}
+    
+
+in C, we must explicitly deallocate heap objects when we are finished
+with them
+
+int pop(data_t *dest)
+{
+    if (head == NULL) return 0;
+
+    if (dest)   *dest = head->payload;
+
+    struct node *old = head;
+    head = head->next;
+    free(old);
+
+    return 1;
+}
+
+
+free() only works with objects created by malloc()
+
+    the address we pass to free must be one we obtained from malloc
+    
+    
+    
+    int *p, *q;
+    p = malloc(20 * sizeof(int));
+    q = p;
+    
+    what is needed to free the array created above?
+    1. free(p);
+    2. free(q);
+    3. free(p); free(q);
+
+    both 1 and 2 will free the array
+    but 3 is a memory error (double free)
+
+    int *p = malloc(20 * sizeof(int));
+    int *q = p + 10;
+    
+    free(q);   // nope
+    
+    
+other errors
+    use after free: dereference a pointer after it has been freed
+    
+    
+    void free(void *);
+    
+    
+

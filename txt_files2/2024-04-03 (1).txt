@@ -1,0 +1,225 @@
+CS 214 / Deadlock, semaphores
+=============================
+
+key idea: coordinate exclusive access to shared mutable resource
+
+key challenge: determining what needs to be sequential
+	if too many things are sequential, you lose concurrency
+	if not enough things are sequential, we can have data races
+
+one solution: mutual exclusion
+	using a mutex, we can coordinate exclusive access to a resource
+		at most one thread has access at a time
+		every access is strictly before or after every other access
+
+questions:
+	how many mutexes should we have
+	what code should be in the critical sections (when we have exclusive access)
+	
+		not enough mutexes leads to too many things being sequential
+		too many mutexes are difficult to understand
+			-> possible non-exclusive behavior		
+
+
+deadlock
+--------
+
+	typedef struct {
+		int balance;
+		pthread_mutex_t lock;
+	} account_t;
+	
+	
+	void transfer(account_t *dst, account_t *src, int amount)
+	{
+		pthread_mutex_lock(&src->lock);
+		pthread_mutex_lock(&dst->lock);
+		
+		src->balance -= amount;
+		dst->balance += amount;
+		
+		pthread_mutex_unlock(&dst->lock);
+		pthread_mutex_unlock(&src->lock);
+	}
+
+	account_t X, Y;
+
+	thread A			thread B
+	--------			---------
+	
+	transfer(Y, X, a);	transfer(X, Y, b);
+	lock(X)				lock(Y)
+		-> acquired			-> acquired
+	lock(Y)				lock(X)
+		-> blocked			-> block
+		
+	A can't proceed until B finishes
+	but B can't proceed until A finishes
+
+
+necessary conditions for deadlock
+1. mutual exclusion
+2. hold-and-wait
+	while holding exclusive access to one resource, block trying to get
+	access to another
+3. no preemption
+	no thread can force another thread to release exclusive access
+4. circular wait
+	e.g. A waits for B and B waits for A
+
+
+possible solutions:
+disallow hold-and-wait
+	e.g., only allow one lock at a time
+	e.g., if we need multiple locks, get them all simultaneously
+		you either hold all the locks, or block until they are all available
+		
+disallow circular wait
+	always acquire multiple locks in some specified order
+	(may not always be practical)
+
+
+
+we can design higher-order interfaces involving multiple locks
+	that ensure deadlock cannot happen
+	-> "monitors"
+
+
+
+barriers
+--------
+
+https://pubs.opengroup.org/onlinepubs/9699919799/functions/pthread_barrier_init.html
+
+abtraction used to create "rendezvous" points
+	points where all involved threads are at known locations
+	
+
+pthread_barrier_t
+
+int pthread_barrier_init(pthread_barrier_t *bar,
+	pthread_barrierattr_t *attr,
+	unsigned int count);
+
+int pthread_barrier_destroy(pthread_barrier_t *bar);
+
+int pthread_barrier_wait(pthread_barrier_t *bar);
+	blocks threads until the specified number of threads are waiting
+	
+	
+	for (...) {
+		// concurrent stuff
+		
+		pthread_barrier_wait(&bar);
+	}
+
+
+semaphores
+----------
+
+first synchronization primitive
+most powerful synchronization primitive
+
+idea: integer that can be increased or decreased
+	but cannot be decreased below zero
+	
+can be used to model a limited number of available resources
+	
+operations:
+	#include <semaphore.h>
+	
+	sem_t
+	int sem_init(sem_t *sem, int pshared, unsigned int count);
+	int sem_destroy(sem_t *sem);
+	
+	int sem_post(sem_t *sem);  // increments the integer (maybe wakes a thread)
+	int sem_wait(sem_t *sem);  // decrements the integer (maybe blocks)
+
+we can make a mutex using a semaphore
+
+	mutex			semaphore
+	-----
+	init()			init(1)
+	"locked"		0
+	"unlocked"		1
+	lock()			wait()
+	unlock()		post()
+	
+	
+	
+we can make something like a condition variable with a semaphore
+
+	cond.var		semaphore
+	--------		---------
+	init()			init(0)
+	wait()			wait()
+	signal()		post()
+	
+	except: calling signal() when no thread is waiting has no effect
+		but calling post() always increments the integer
+
+The Little Book of Semaphores
+	excellent tutorial for using semaphores to write multithreaded programs
+
+
+
+typedef struct {
+	data_t *data;
+	int first;
+	int last;
+	int size;
+	sem_t lock;			// used for mutual exclusion
+	sem_t open;			// represents unused space in the array
+	sem_t occupied;		// represents items in the array
+} queue_t;
+
+void q_init(queue_t *q, int capacity)
+{
+	q->data = malloc(sizeof(data_t) * capacity);
+	q->size = capacity;
+	q->first = 0;
+	q->last = 0;
+	sem_init(&q->lock, 0, 1);        // mutex initially unlocked
+	sem_init(&q->open, 0, capacity); // all spaces initially open
+	sem_init(&q->occupied, 0, 0);    // no spaces initially occupied
+}
+
+
+void q_enqueue(queue_t *q, data_t item)
+{
+	sem_wait(&q->open);
+	
+	sem_wait(&q->lock);
+		q->data[q->last] = item;
+		q->last++;
+		if (q->last == q->size) q->last = 0;
+	sem_post(&q->lock);
+
+	sem_post(&q->occupied);
+}
+
+void q_dequeue(queue_t *q, data_t *dst)
+{
+	sem_wait(&q->occupied);
+	
+	sem_wait(&q->lock);
+		*dst = q->data[q->first];
+		q->first++;
+		if (q->first == q->size) q->first = 0;
+	sem_post(&q->lock);
+
+	sem_post(&q->open);
+}
+
+
+major differences with semaphores
+
+	in general, any thread can call post on any semaphore
+	
+Posix-specific differences
+
+	semaphores can be used in signal handlers
+	
+	semaphores can be external to a process and shared among processes
+	
+		sem_open()

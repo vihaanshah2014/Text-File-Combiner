@@ -1,0 +1,170 @@
+CS 214 / Introduction, C
+========================
+
+Prof. David Menendez <davemm@cs.rutgers.edu>
+    Please put [CS214] in your subject line
+    Use the discussions tab on Canvas for general questions
+
+    Office: Hill 448
+
+Systems Programming
+    Sections 05-08
+    
+    Run-time system 
+    Operating system
+    
+C Programming Language
+Unix-style operating systems (linux, Posix)
+    - files
+    - file system
+    - multitasking, process control
+    - multithreading (pthread)
+    - network communication (sockets)
+
+
+Project-oriented class
+    Three or four programming assignments
+        Two-person assignments
+        Why?
+        - most of you will need to work with others in the future
+        - opportunity to work with others
+        
+        tips
+        - communicate
+        - determine clear goals and responsibilities
+
+Reference compiler is GCC 11.4 - installed on iLab
+    GCC = GNU Compiler Collection
+    GNU = GNU's Not Unix
+
+
+Why C?
+------
+
+C is a relatively simple language
+- gives good visibility into the low-level aspects of the computer
+- designed to run (and be compiled) on low-powered hardware
+
+
+C vs Java
+- similar syntax
+- similar orientation
+
+Java is an interpreted language
+    java source code --javac--> "bytecode" --java--> execution
+    MyClass.java --> MyClass.class
+
+
+C is a compiled language
+    myprogram.c --gcc--> myprogram
+
+    compiler translates source code to machine code
+        source code - text readable by humans
+        machine code - binary format understood by the CPU
+
+
+    "compile time" - when the compiler translates your code
+        compile time errors - problems with your code that prevent
+            it from being compiled (syntax errors, type errors, missing names)
+        "static analysis" - determines properties that are true for
+            all possible executions
+    
+    "run time" - when your compiled code is executing
+        run-time errors - problems with your code that happen while it
+            is executing
+        "dynamic analysis" - determines properties that are true for
+            a specific execution
+            
+    stages of compilation
+        preprocessing - source to source translation
+        compilation - translates source code to machine code
+            "object file" is machine code that doesn't contain all definitions
+        linking - combines multiple object files into an executable
+
+    why separate compiling and linking?
+        re-compiling large programs takes time
+        splitting our source into multiple files means we only need
+            to recompile the files that change
+
+
+gcc myprogram.c
+    compiles and links and creates an executable called "a.out"
+
+gcc myprogram.c -o myprogram
+    compiles and links and creates an executable called "myprogram"
+    
+gcc -c myprogram.c
+    compiles program and creates an object file "myprogram.o"
+    
+gcc myprogram.o -o myprogram
+    links myprogram.o (to the standard library) and creates executable "myprogram"
+
+gcc myprogram.o mylibrary.o mydatastructure.o -o prog
+    links multiple object files (and standard library) and
+    creates executable "prog"
+    
+-Wall
+-fsanitize=address
+
+
+Java has a hierarchical name space
+    classes have names like java.sun.foo.bar.MyClass
+    methods are specific to a class
+
+C has a flat name space
+    all functions and global variables must have unique names
+    can be difficult to coordinate large projects
+        -- not an issue for us
+
+
+Java has classes and methods
+C has functions
+    functions are just named bits of code you can call (with parameters)
+
+implications:
+    no implicit parameters (this)
+    no polymorphism/overloading
+
+Types
+-----
+
+C has a small set of built-in types
+    integers (int)
+        unsigned/signed  - are negative numbers allowed?
+        short/long/unspecified - how many bits are used?
+            - C does not specify sizes for int/short int/long int
+            - short int is at least 2 bytes
+            - long int is bigger than short int
+            - int is at least as big as short int
+            - long int is at least as big as int
+            sizeof(int)
+        
+    char - "characters"
+        these are just integers
+        ASCII assigns numbers to popular symbols
+            'A' == 65
+        chars can be signed or unsigned
+        
+    floating point
+        float, double
+        C does not require IEEE floating point, but all modern hardware
+            uses it
+        
+        always use double, unless you are tight on memory
+    
+    arrays - arrays in C are a state of mind
+        an array of ints is just a bunch of ints adjacent in memory
+    
+        arrays do not track their length!
+            if you don't know, you should have kept track of it
+        
+        
+        
+
+
+
+
+
+
+    
+    

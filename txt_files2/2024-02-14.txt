@@ -1,0 +1,243 @@
+CS 214 / Posix File IO
+======================
+
+open
+----
+
+#include <fcntl.>
+int open(char *pathname, int flags);
+int open(char *pathname, int flags, mode_t mode);
+
+
+pathname: indicates how to find the file we want to open
+    a name by itself (with no slashes) indicates a file in the working directory
+    
+    a path contains one or more names separated by slashes
+        slashes indicate directory containment
+        
+        foo/bar/baz  "baz" inside "bar" inside "foo" inside the working directory
+        -> called a "relative path"
+        
+    a path that begins with / is an absolute path, starting from
+        the file system root
+        e.g., /usr/bin/gcc
+    
+    special directory entries
+        ..   means the parent directory
+        .    means the directory itself
+    
+        ../foo  means "foo" in the parent of the working directory
+
+flags are an integer (bitmap) indicating how we want to use the file
+
+flags must include exactly one of:
+
+    O_RDONLY   - open file in read mode
+    O_WRONLY   - open file in write mode
+    O_RDRW     - open file in read/write mode
+
+we can combine with additional flags using | (bitwise or)
+
+    O_CREAT  - create file if it does not exist (requires mode)
+    O_EXCL   - fail if the file already exists
+    O_TRUNC  - set the file length to 0, if it exists
+    O_APPEND - all writes go to the end of the file
+    O_NONBLOCK - open file in non-blocking mode (doesn't matter much for disk files)
+
+
+on success, open() returns a file descriptor (non-negative int)
+    this is guaranteed to be different from any *currently* open file
+
+on failure, open() returns -1 and puts an error code in errno
+
+    int fd = open("foo.txt", O_RDONLY);
+    if (fd < 0) { // report error or something }
+
+        
+errno
+-----
+
+errno is global variable that some functions use to report error conditions
+
+the man pages for library functions will describe how functions
+report errors and whether they use errno and what values they use
+
+the library defines macros for all error codes
+    EACCES - don't have permission to read/write file
+    EINVAL - path is invalid
+    EEXIST - file already exists
+
+in principle, we can use errno to learn why something went wrong
+and try to fix it
+
+in practice, we use errno to provide more specific error messages
+
+void perror(char *msg);
+    
+    prints a message incorporating msg and a description of errno
+    
+    
+    int fd = open(some_file, O_RDONLY);
+    if (fd < 0) {
+        perror(some_file);  
+            // prints a message that looks like
+            // some_file: reason we couldn't open some_file
+        abort();
+    }
+
+
+char *strerror(int error_code);
+    returns a string describing the error code
+    
+    
+    fprintf(stderr, "%s: %s\n", msg, strerror(errno));
+    
+
+file permissions
+----------------
+
+the mode refers to the traditional way to indicate file access permissions
+    in Unix
+    
+every file has an owner (a user account)
+every file is associated with a group (a list of user accounts)
+
+three categories of users
+    u - the owner
+    g - the group (except the owner)
+    o - everyone else
+
+for each category, there are three permissions
+    r - read access
+    w - write access
+    x - execute access (run a file or access a directory)
+
+
+uuugggooo
+rwxrwxrwx
+
+the shell command chmod can change the mode of a file
+
+    chmod <code> <file>
+    
+    codes are [ugoa][+-][rwx]
+    
+        u+rwx  - give owner read/write/execute permission
+        a-wx   - remove write/execute from all users
+    
+    we can also specify an exact mode by giving three octal digits
+    
+    7 in octal is 111 in binary, meaning rwx
+    6 in octal is 110 in binary, meaning rw-
+    5 in octal is 101 in binary, meaning r-x
+    
+    chmod 700 file   - sets rwx------
+    chmod 644 file   - sets rw-r--r--
+
+when we open a file with O_CREAT, we specify the mode of the file
+    to create as an integer
+    
+    fd = open(name, O_WRONLY|O_CREAT|O_TRUNC, 0640);
+        // the permissions we want to give are u+rw, g+r
+        
+reminder: in C, an integer literal starting with 0 is in octal!
+
+    0100 == 64
+    0x40
+    
+the library also provides constants that you can combine to create
+    a mode
+    
+    0640
+can also be written
+    S_IRUSR|S_IWUSR|I_SRGRP
+
+
+close
+-----
+
+#include <unistd.h>
+int close(int fd);
+
+    closes the indicated file
+    on success, returns 0
+    on failure, returns -1 and sets errno
+
+any files that are still open when the program ends will automatically
+    be closed
+    
+    either by the run-time system or by the OS
+
+each process has a limited number of simultaneously open files
+    if you open a lot of files, you could run out
+    it is good practice to close files once you are finished with them
+
+
+read
+----
+
+ssize_t read(int fd, void *buf, size_t n);
+
+    reads up to n bytes from a readable file
+    fd indicates the file to read from
+    buf is an array of bytes to write to
+    
+    on success, read returns the number of bytes read (at least 1)
+    read returns 0 at the end of the file
+    on failure, read returns -1 and sets errno
+    
+every open file has a file position (aka a file pointer or cursor)
+    when we read a file, the position starts at the beginning
+    each time we read, the position advances
+
+
+
+    char buf[BUFSIZE];
+    int r;
+    
+    r = read(fd, buf, BUFSIZE);
+    while (r > 0) {
+        // do stuff with buf
+        
+        r = read(fd, buf, BUFSIZE);
+    }
+    // done
+    
+or, if you don't like repeating yourself
+
+    char buf[BUFSIZE];
+    int r;
+    
+    while ((r = read(fd, buf, BUFSIZE)) > 0) {
+        // do stuff with buf
+    
+        for (i = 0; i < r; i++) {
+            if (isspace(buf[i])) space_count++;
+        }
+            
+    }
+    // done
+
+
+write
+-----
+
+ssize_t write(int fd, const void *buf, size_t n);
+
+    writes up to n bytes to a writable file
+    fd indicates the file
+    buf contains the bytes to be written
+    
+    returns the number of bytes that got written (at most n)
+    returns -1 on failure and sets errno
+    
+
+    int a[] = { 1, 2, 3, 4 };
+    
+    write(fd, a, sizeof(a));
+    
+    \1\0\0\0\2\0\0\0\3\0\0\0\4\0\0\0
+
+
+
+

@@ -1,0 +1,263 @@
+CS 214 / Multitasking
+=====================
+
+Project II notes
+----------------
+
+- the dictionary is specified as an argument each time the program runs
+    -> make no assumptions about dictionary length/content
+    
+- you are only resposible for handling ASCII characters (0-127)
+    -> /usr/share/dict/words is unfortunately UTF-8, so some words have
+       characters outside that range
+    -> it is safe to ignore words with non-ASCII characters
+
+- ctype.h has many useful functions/macros: isalpha(), isupper(), tolower()
+
+- for our purposes, all characters are letters, whitespace, or other
+    -> treat symbols, numbers, control characters like punctuation
+        
+- if you can't get all the features working, get as many as you can
+
+apple   => apple, Apple, APPLE
+Rutgers => Rutgers, RUTGERS
+NSA     => NSA
+
+MacDonald   => MacDonald, MACDONALD
+fooBar      => fooBar, FooBar, FOOBAR
+
+aBc => aBc, ABc, ABC
+    not: abc, abC, aBC, Abc, AbC
+
+
+Exam topics
+-----------
+
+C programming
+    - general syntax
+    - preprocessor, use of #include
+    - standard library
+    - helpful tools: gcc, make, man
+        -> man (the manual) is divided into sections
+            POSIX functions are in section 2
+            C standard functions are in section 3
+    - declarations and definitions
+            function definition vs prototype
+    - preprocessing vs compiling vs linking
+        - how is linking used to support separate compilation?
+    - types
+        - char, int (various), float, double
+        - struct, union, enum
+        - arrays
+        - pointers
+        - sizeof()
+            - array variable vs pointer to array
+    - macros
+        - macro expansion
+        - considerations when defining macros with arguments 
+            (recommended parentheses)
+            
+            #define SQUARE(X)  X * X
+                    <- needs more parentheses, but where and why?
+
+        - checking macro expansion with gcc -E
+        - use of \ to continue definitions
+
+#define strict(X) \
+    if ((X) == -1) { \
+        perror(""); \
+        exit(EXIT_FAILURE); \
+    }
+
+Memory 
+    - understanding all data as collections of bytes
+    - pointer vs "pointee"
+    - pointer types and pointer arithmetic
+    - object location vs object content
+        int a;   a vs &a 
+        int *p;  p vs *p vs &p
+    - use of malloc(), realloc(), and free()
+        int *p = malloc(...);
+        int *q = p;
+        p = realloc(p, ...)
+        *q   /// potentially use-after-free
+
+Posix File IO
+    - open(), close(), read(), write()
+        open("foo", O_WRONLY|O_CREAT|O_TRUNC, 0777);
+    - use of buffers
+    - opendir(), readdir(), closedir()
+
+File system
+    - inode block vs data block
+    - directory files
+        - file names
+    - "linking" files
+        -> can a file have more than one name?
+        -> can a directory be linked more than once?
+
+
+0 = /
+    .   0
+    ..  0
+    foo 1
+
+1 = /foo
+    .   1
+    ..  0
+    bar 2
+    baz 3
+
+2 = /foo/bar
+    .   2
+    ..  1
+    qux 4
+
+3 = /foo/baz
+    .   3
+    ..  1
+
+4 = /foo/bar/quux
+    .   4
+    ..  2
+    
+
+multitasking
+------------
+
+a CPU executing a program is doing a task
+a task involves
+    - a program being executed
+    - stack
+    - instruction pointer, registers
+
+
+multitasking refers to execution of multiple tasks concurrently
+    why?
+    
+    tasks typically spend a lot of time waiting for input (blocked)
+    -> multitasking allows the CPU to keep busy while waiting for IO
+
+    responsive interactive programs
+        -> UI can respond to input while complex computations occur in
+            background
+
+    take advantage of multiple CPUs (multiprocessing)
+
+task switching
+    -> every so often, the CPU suspends the current task and starts
+        or resumes executing some other task
+    
+    when do we switch tasks?
+    cooperative multitasking
+        - when a task blocks, or when it explicitly yields control
+    preemptive multitasking
+        - when a task blocks or runs out of time
+        - the scheduler assigns each task a slice of time
+
+
+virtual memory/protected memory
+    pointers in user programs refer to "logical addresses"/"virtual addresses"
+    the memory bank locates data using "physical addresses"
+    
+    the memory management unit in the CPU maps logical addresses to
+        physical addresses -> per process
+    
+    -> two processes can use the same logical address without inteference
+        because they refer to distinct physical addresses
+    -> one process cannot interfere with another's memory
+    
+a process has
+    - a virtual memory
+    - one or more tasks
+    
+
+creating a process
+------------------
+
+pid_t fork(void);
+
+    when a process (the parent) calls fork(), it creates a clone of itself
+        (called the child)
+    the child is initially identical to the parent
+    
+    on success:
+        fork returns 0 in the child
+        fork returns the PID of the child in the parent
+    on failure, it returns -1 and sets errno
+    
+
+    pid_t child = fork();
+    if (child == 0) {
+        // in child
+        exit(...);
+    }
+    // in parent
+    
+    
+    pid_t a = fork();
+    pid_t b = fork();
+    
+    |
+    +----+
+    |    |
+    +-+  +-+
+    | |  | |
+
+
+if you fork, you must wait
+
+pid_t wait(int *wstatus);
+
+    if a child process has terminated, obtains its exit status
+    if a child is still running, block until it terminates
+    if no child is running, return -1 and set errno
+    
+
+every process is listed in the process table
+    when a proces terminates, it remains in the process table as a "zombie"
+    the entry for a zombie process indicates how it terminated
+
+calling wait() with at least one zombie child will obtain
+    the information and "reap" (remove) its table entry
+    
+
+if the parent terminates before the child, the child becomes an "orphan"
+
+    if the child terminates/has terminated, it is a "zombie orphan"
+    problem: normally, only the parent can wait for (reap) a child
+    
+typically, some process in the OS (init) will "adopt" orphans and
+    reap them when they terminate
+
+
+
+
+
+what can a child process do?
+
+-> execute a different program
+    (does not create a new process)
+
+    execl() and execv() change the program that the process is running
+    
+    int execl(char *path, ...);
+    int execv(char *path, char **args);
+    
+    
+    execl("/usr/bin/ls", "/usr/bin/ls", "-l", NULL);
+    
+    
+    char *args[] = { "/usr/bin/ls", "-l", NULL };
+    execv("/usr/bin/ls", args);
+    
+
+
+    
+    
+    
+if (fork() == 0) {
+    execl(...);
+    
+}
+wait()

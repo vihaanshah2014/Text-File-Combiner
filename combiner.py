@@ -1,7 +1,7 @@
 import os
 
 # Folder path where your .txt files are stored
-folder_path = 'txt_files1'  # The folder is on the same level as the script
+folder_path = 'txt_files2'  # The folder is on the same level as the script
 combined_file_path = 'combined.txt'  # Output file
 
 # Initialize an empty string to store the combined contents of all text files

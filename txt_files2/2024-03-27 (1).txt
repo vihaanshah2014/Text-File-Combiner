@@ -1,0 +1,235 @@
+CS 214 / pthread
+================
+
+recap:
+    a multithread process contains multiple tasks with a single virtual
+        memory (containing program code, globals, the heap, etc.)
+
+
+race condition -
+    outcome depends on how tasks are scheduled;
+    may or may not be a problem
+
+data races - 
+    multiple threads have simultaneous access to some data, and at least
+    one is writing
+    - never good
+
+
+making threads
+--------------
+
+pthreads - Posix threads
+    general interface for creating threads
+    provides several primitives for synchronizing threads
+
+
+when using pthreads with GCC, compile with -pthread
+
+#include <pthread.h>
+
+int pthread_create(
+    pthread_t *thread_id,
+    pthread_attr_t *attributes,
+    void *(*start_function)(void *),
+    void *argument);
+
+
+essentially calls a function "in the background"
+
+on success,
+    create a new thread that executes start_function(argument)
+    
+    a thread identifier is written to thread_id
+    returns 0
+    
+on failure, returns an error code (does not write to errno)
+
+pthread_t may be an integer or a structure
+    it can be passed to functions, but should be treated as an opaque value
+    use pthread_equal() rather than ==
+
+
+pthread_attr_t is an abstract struct describing thread features
+
+    pthread_attr_init(pthread_attr_t *attrs);
+    pthread_attr_destroy(pthread_attr_t *attrs);
+    
+    multiple functions named pthread_attr_get<something>() and
+        pthread_attr_set<something>()
+        
+we can just pass NULL to get default settings for threads
+
+
+
+
+the function takes a single void pointer and returns a void pointer
+
+void *thread_worker(void *arg);
+
+
+
+int pthread_join(pthread_t thread_id, void **return_value);
+
+    if the specified thread is still running, block until it terminates
+    otherwise, obtain its return value from the thread table
+    write the value it returned to *return_value
+    
+        (pass NULL to drop any returned value)
+
+    note that we specify which thread we are joining with
+    -> otherwise, we would have no way to know what sort of pointer we
+        would get
+
+example: calling a function in the background and obtaining its result
+    once we are ready for it
+    
+    
+    {
+        pthread_t worker;
+        arg_t arg = ...;
+        rval_t *rval;
+        
+        pthread_create(&worker, NULL, background_work, &arg);
+            // need to be sure background_work() wants a pointer to
+            // an arg_t
+    
+        // do our own work for a while
+        
+        pthread_join(worker, &rval);
+            // once this returns, we know background_work() has finished
+
+            // rval now contains its return value   
+    
+    }
+
+
+a more common pattern is to spawn multiple threads, each taking
+a portion of a larger task, and then waiting for them all to finish
+
+
+    {
+        pthread_t workers[5];
+        int args[5];
+        
+        for (int i = 0; i < 5; i++) {
+            args[i] = i;
+            pthread_create(&workers[i], NULL, worker_function, &args[i]);
+            
+            //pthread_create(&workers[i], NULL, worker_function, &i);
+        }
+        
+        // now all five threads have been created
+        
+        for (int i = 0; i < 5; i++) {
+            pthread_join(workers[i], NULL);
+        }
+        
+        // once we get here, we know all the threads have completed
+    
+    }
+
+processes           threads
+---------           -------
+pid_t               pthread_t
+fork()/exec()       pthread_create()
+wait()/waitpid()    pthread_join()
+exit()              pthread_exit()
+
+
+processes have a defined parent/child relationship
+    every process has a parent, only its parent can wait for it
+
+threads are peers
+    any thread can join any other thread
+    "detached" threads cannot be joined
+
+
+
+void pthread_exit(void *rval);
+    // terminates current thread
+
+
+
+
+a few other thread functions that might possibly be useful
+
+pthread_t pthread_self();
+    returns identifier of current thread
+
+int pthread_equal(pthread_t t1, pthread_t t2);
+    tests whether two thread identifiers are equal
+    
+int pthread_kill(pthread_t thread, int sig);
+    sends a signal to the specified thread
+    
+int pthread_cancel(pthread_t thread);
+    tells a thread to terminate
+    
+int pthread_detach(pthread_t thread);
+    makes a thread unjoinable
+    thread will clean itself out of the thread table when it terminates
+
+
+sequentializing access
+----------------------
+
+
+pthread_mutex_t - abstract structure
+    provides a mutex ("lock")
+    
+    
+locks must be initialized and destroyed
+
+    int pthread_mutex_init(pthread_mutex_t *lock, pthread_mutexattr_t *attrs);
+    
+    int pthread_mutex_destroy(pthread_mutex_t *lock);
+    
+    
+locking and unlocking
+
+    int pthread_mutex_lock(pthread_mutex_t *lock);
+    int pthread_mutex_unlock(pthread_mutex_t *lock);
+
+
+at most one thread can "have" the lock at a time
+    calling lock() will block if another thread holds the lock
+only the thread that has the lock can call unlock()
+
+
+usual pattern:
+
+    pthread_mutex_lock(&m);
+    
+        // critical section
+        
+    pthread_mutex_unlock(&m);
+
+
+
+typedef struct {
+    int balance;
+    pthread_mutex_t lock;
+} account_t;
+    // invariant: balance is only accessed while holding lock
+
+
+void account_change(account_t *a, int difference)
+{
+    pthread_mutex_lock(&a->lock);
+    
+    a->balance += difference;
+    
+    pthread_mutex_unlock(&a->lock);
+}
+
+by limiting access to balance to synchronized code, we eliminate data races
+
+
+
+
+void account_transfer(account_t *dest, account_t *src, int amount)
+{
+    account_change(src, -amount);
+    account_change(dest, amount);
+}

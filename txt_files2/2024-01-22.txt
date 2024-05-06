@@ -1,0 +1,304 @@
+CS 214 / C Intro/Review
+=======================
+
+Please look for an announcement regarding recitation
+
+types (continued)
+-----------------
+
+C's type system is pretty minimal
+    - types are primarily used by the compiler for code generation
+        how much space to allocate for a variable
+        what instructions to use when manipulating data
+            e.g., does < turn into signed/unsigned integer comparison
+                or floating point comparison?
+    - occasionally, the compiler will detect and report type errors
+        certain types do not have automatic conversion (e.g., ints and
+            arrays)
+        however, the compiler will automatically convert number types
+        
+        int x = 5;
+        float y = x / 2;
+            // does integer division, then promotes the result to a float
+        float z = x / 2.0;
+            // promotes the value of x to a float and does floating-point
+            // division
+        
+        // y == 2.0, z == 2.5
+        
+explicit casts
+    we can explicitly cast a value from one type to another
+    (desired_type)
+    
+        (float) x / 2;
+            // casts x's value to a float, then performs FP division
+
+more types are numbers than you might think
+    char x = 'A';
+    int y = 'A';  // also ok!
+
+
+enumerated types
+----------------
+
+used to create a type with a small, discrete set of values
+
+    enum direction { north, east, south, west };
+    enum color { red, green, blue, yellow, gray };
+    enum bgtype { fill, transparent, striped };
+    
+enum direction heading = north;
+
+    "enum direction" is the type
+
+switch (heading) {
+    case north:
+        ...
+    case east:
+        ...
+    ...
+}
+
+like characters, enums are just fancy integers
+each "enumerator" is given an integer value
+
+we can treat enums like integers in ways that may or may not make sense
+
+    enum log_level { CRITICAL, FATAL, ERROR, WARNING, NOTE };
+    
+    enum log_level msglevel = ...
+    
+    if (msglevel <= ERROR) {
+        ...
+    }
+    
+technically, anything you can do with enum you could do with int and
+some declared constants
+-> using enums can provide some hints to people reading your code
+
+
+
+arrays
+------
+
+contiguous sequences of values of some type
+
+when we declare an array variable, we must indicate its dimension
+
+    int a[5];
+    int b[] = {1, 2, 3, 4, 5};
+        // implicitly declared dimension from initializer
+    int c[20] = {1,2,3,4,5};
+    
+    int a, b, c[4];
+        declares a and b as int, and c as array of 4 ints
+        
+array indexing in C is not bounds checked
+    arrays do not store their dimension at run-time
+
+multidimensional arrays are arrays of arrays
+
+    double matrix[R][C];
+        matrix is an array of R elements
+        each of which is an array of C doubles
+    
+    in memory, this is indistinguishable from an array of R*C doubles
+
+    writing matrix[1] gets me the second row of the matrix
+    writing matrix[1][1] gets me the second element of the second row
+    
+
+one special kind of array
+    C does not have a string type
+    C represents strings using character arrays containing a terminator
+        terminator is a char with numeric value 0
+            0, '\0' (in ASCII, this is called NUL)
+            do not confuse this with '0'
+    by definition, a string ends with the terminator
+        (or is the characters preceding the terminator, depending on your view)
+
+
+in most contexts, a string literal will refer to a character array
+in the static, read-only part of your program's memory
+
+    char *p = "hello";
+    
+    p[0] = 'H';  // probably crashes your program
+    
+    char s[] = "hello";
+        initializes s to contain these characters
+        equivalent to:
+    char s[] = {'h', 'e', 'l', 'l', 'o', '\0' };
+    
+    s will be in writable memory, so I can change its contents later
+
+
+    char t[] = {'h', 'e', 'l', 'l', 'o'};
+        t will contain these 5 characters, but not a string
+        
+    char name[128] = "Joe Someone";
+    
+C uses terminators because strings have different lengths
+we may want to store different strings in a particular array
+the terminator tells us how long a particular string is
+
+    the length of the array is fixed
+    the length of the string in the array is variable
+
+
+structs
+-------
+
+a way to bundle values of different types
+    the number and types of the values is fixed
+    values are referred to by name ("fields")
+    
+struct point {
+    double x;
+    double y;
+};
+
+    // declares a type "struct point"
+    // a struct point has two fields: x and y
+
+struct point p;
+p.x = 1;
+p.y = 2.5;
+
+    // we can initialize a struct using the curly braces
+    // fields are given in the same order as the struct declaration
+struct point p = { 1, 2.5 };
+
+int is_northwest(struct point p)
+{
+    return (p.x > 0 && p.y > 0);
+}
+
+void do_nothing(struct point p)
+{
+    p.x += 25;
+}
+
+
+struct point move(struct point p)
+{
+    p.x += 25;
+    return p;
+}
+
+
+note: we don't usually pass structs to functions or return them
+
+
+struct triangle {
+    struct point vertices[3];
+    enum color bgfill;
+}
+
+
+struct triangle drawlist[200];
+
+we can mix and chain array indexing and field accesses
+
+    drawlist[20].vertices[1].x = 0;
+
+
+union
+-----
+
+allows us to make a type that stores values from a small set of types
+
+union intorfloat {
+    int i;
+    float f;
+};
+
+union intorfloat x;
+    // x can contain an int or a float, but not both
+
+
+x.i = 5;
+x.f = 1.0; // overwrites the 5 with 1.0
+
+there is no way to query x to find which type of value it contains
+
+unions are only safe to use in a context where it is known what type
+    they contain, or that information is kept elsewhere
+
+
+x.i = 5;
+printf("%f\n", x.f);  // undefined!
+
+
+typedef
+-------
+
+allows us to give a new name to an existing type
+
+typedef int color;
+    // "color" is a new name for "int"
+
+color background;
+color foreground;
+
+this is a new name, not a new type
+the compiler is happy to mix code using int and color
+
+typedef struct point point;
+    // "point" is a new (shorter) name for "struct point"
+    
+typedef double vector[3];
+
+    vector p;
+    double p[3];  // the same
+
+
+
+pointers
+--------
+
+all data in C is stored in memory
+all memory locations have an address
+a pointer is a value that represents an address/the location of some data
+
+implications:
+    all variables have an address
+        &x evaluates to the address of x, not its value
+    all struct fields and array elements have addresses
+        &a[4]
+        &p.x
+        &drawlist[20].vertices[1].x
+    all functions have an address
+        writing a function name with no arguments yields its address
+
+a pointer variable stores the address of something
+
+    we can't do much with just an address
+    all pointers in C are typed
+    the type indicates the type of the data
+    
+int *p; 
+    // p is a pointer, it contains the address of an int
+int i = 5;
+p = &i;
+    // p contains the address of i
+    // "p points to i"
+
+int j = *p;
+    // the * says we are "dereferencing" p
+    // we want the value at the address p contains
+    
+*p = 6;
+    // writes a 6 at the location p points to
+    // in this case, it changes i
+    
+    
+int *p = &i;
+p = &j;
+
+int *p, *q;  // p and q are pointers
+int *p, q;   // only p is a pointer
+int* p, q;   // only p is a pointer (misleading!)
+
+
+

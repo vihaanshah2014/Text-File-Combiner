@@ -1,0 +1,223 @@
+CS 214 / Sockets
+================
+
+Network stack
+    link layer - communication between machines on the same network
+        Ethernet - communicates in discrete messages (frames)
+    
+    Internet layer (IP) - communication between machines on the Internet
+        packet forwarding, best-effort
+            messages are broken into individual packets, each sent
+            separately
+            messages can be lost, or arrive out of order
+        
+        IP packets are roughly 20 - 65,000 bytes
+            packets that are too large for the underlying transport
+            are "fragmented" and reassembled at the recipient
+            1500 bytes is a common size
+    
+        endpoints are identified by IP address
+            - identifies a network interface (usually 1 per machine)
+    
+    Transport layer
+        UDP (User Datagram Protocol)
+            send individual messages from one service to another
+            endpoints identified by IP address and port number
+
+            best effort, datagram protocol
+            non-connection oriented
+            
+        TCP (transmission control protocol)
+            read and write byte streams sent between two services
+            endpoints identified by IP address and port number
+            
+            connection oriented
+            TCP itself makes sure that bytes are received in order
+            TCP divides the outgoing byte stream into "segments"
+                (each segment is sent in a single packet)
+                
+            from an application standpoint, most of the work is done
+            by the OS
+            
+
+sockets
+-------
+
+a set of functions used to establish network communication
+part of POSIX
+
+fundamental type: the socket
+    this is a file descriptor that refers to a network service
+    
+functions attempt to be as general as possible
+    does not assume we are using a particular network
+    does not assume we are working at a particular level
+
+
+int socket(int domain, int type, int protocol);
+
+    domain - what sort of network will we be using (AF_INET)
+    type - what sort of socket are we creating
+        SOCK_STREAM  - communication via streams (e.g. TCP)
+        SOCK_DGRAM   - communication via datagrams (e.g., UDP)
+        various others used by other network types
+    
+    protocol - used to distinguish between multiple transports of the 
+        same type (typically 0)
+
+    returns a file descriptor on success
+    returns -1 on failure
+    
+    this creates an abstract socket, but does not configure it
+    
+int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
+
+    for streaming sockets, establish a connection with a service on
+    a remote host
+    
+    sockfd  - file descriptor returned from socket()
+    addr    - address of the remote service
+    addrlen - length of the addr struct
+    
+    note: addresses are usually network-specific structures
+        we cast the pointer to struct sockaddr * and provide the size
+        
+        usually we don't create this struct ourselves
+
+
+domain name service (DNS)
+-------------------------
+
+DNS a distributed hierarchical database that stores information about
+    "domains"
+    
+    domains are identified by words separated by periods
+    
+        rutgers.edu
+        google.com
+        amazon.co.uk
+        cs.rutgers.edu
+        www.cs.rutgers.edu
+        
+        subdomains add additional words to the front of the name
+        
+    each domain is controlled by some organization, which can establish
+        subdomains with their own owners
+        
+    
+    each domain can have several kinds of information
+        e.g., who controls the domain & how to reach them
+        
+        A - associates an IPv4 address with this domain
+        AAAA - associates an IPv6 address with this domain
+        MX - indicates the machine used for mail handling
+        
+for many protocols, we look up the IP address for a domain and use that
+to connect (or send datagrams)
+
+
+data is stored hierarchically, similar to directories in the file system
+
+    edu says where to find rutgers.edu
+    rutgers.edu says where to find cs.rutgers.edu
+    cs.rutgers.edu says where to find wax.cs.rutgers.edu
+    
+typically, you will have a local DNS server that caches results from
+past DNS queries
+
+the Unix commands host and dig perform DNS queries and print the results
+
+
+typically, your local internet configuration will specify a DNS server
+used for queries
+
+
+using DNS to get addresses
+--------------------------
+
+the old way: gethostbyname()
+
+the better way:
+
+int getaddrinfo(
+    const char *node,             // e.g., domain name
+    const char *service,          // e.g., service name or port number
+    const struct addrinfo *hints, // used to narrow down results
+    struct addrinfo **res);       // will point to first entry in a linked
+                                  // list of answers
+             
+             
+    returns 0 on success
+    an error code on failure
+        (not compatible with errno, perror(), etc.)
+        (use gai_strerror() to get a description of the error)
+
+struct addrinfo {
+   int              ai_flags;
+   int              ai_family;    // domain argument to socket()
+   int              ai_socktype;  // type argument to socket()
+   int              ai_protocol;  // protocol argument to socket()
+   socklen_t        ai_addrlen;
+   struct sockaddr *ai_addr;      // addr argument to connect()
+   char            *ai_canonname;
+   struct addrinfo *ai_next;
+};
+
+
+see network.c for examples of using getaddrinfo() with socket() and connect()
+
+
+usual pattern for clients:
+    use getaddrinfo() to get a linked list of address information records
+    use these with socket() and connect() to establish a connection
+    
+client-server pattern:
+    client creates connections (active)
+    server waits for clients to request connections (passive)
+    
+establishing a listening socket requires three functions
+
+int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
+
+    tells network system to associate our socket with a specific port
+    on the local host
+    
+    sockfd - obtained from socket()
+    addr - identifies the port (recommended: obtain from getaddrinfo())
+    
+    returns 0 on success, -1 on failure (sets errno)
+    
+int listen(int sockfd, int backlog);
+
+    tells network system that we want to wait for incoming connection
+    requests
+    
+    sockfd - obtained from socket()
+    backlog - determines size of connection request queue
+    
+    returns 0 on success, -1 on failure (sets errno)
+    
+
+int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
+
+    obtain file descriptor for an incoming connection request
+    (block until one arrives, if none have arrived yet)
+    
+    sockfd - listening socket
+    addr - address of remote host will be written here
+            (use NULL if we don't care)
+            
+    returns a new streaming socket specific to this connection
+    returns -1 on failure (sets errno)
+    
+each time we accept a connection request, we get a new socket
+
+
+
+
+
+    
+
+
+
+

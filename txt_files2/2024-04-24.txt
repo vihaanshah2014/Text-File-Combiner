@@ -1,0 +1,193 @@
+CS 214 / Protocol consideration
+===============================
+
+we introduced our example: rpsd
+    rpsd = rock-paper-scissors daemon
+        "daemon" - traditional Unix term for a server
+
+rock-paper-scissors protocol
+
+    we assume TCP/IP for transport
+    
+    session layer
+        - which party establishes connections
+        - how long are connections maintained / who closes connections
+        
+    presentation layer
+        - format of messages as byte streams
+        
+    application layer
+        - what messages can be sent
+        - when and from whom these messages can be sent
+        
+
+
+    on Monday, we deliberately chose a very simple presentation
+        (one-byte messages)
+
+
+error conditions in network communication
+
+    - unexpected end of connection
+    - invalid message / garbage data
+    - inappropriate message
+
+
+there is no way to deal with these that is correct for all situations
+    and applications
+    
+e.g., if we get an invalid message, the most reasonable thing to do
+    may be to close the connection
+    
+    - we might want to request a retransmission, but how can we tell
+        when the "good" portion of the data stream starts?
+        
+
+if messages can be more than one byte, we need to consider
+    - incomplete messages
+    
+    
+one simple solution to incomplete messages: call read() again
+
+but: what if we want more control over when we block?
+
+    -> we may not want to block indefinitely
+        it's possible that the other side thinks it sent a complete message
+        and is waiting for our response
+        
+    a protocol may require that a message arrive completely within
+    some time window (e.g., 500 ms from the first byte arriving)
+        we can use setsockopt() to put a timeout on every call to read()
+        we can use poll() to block until data arrives or time expires
+        we could use another thread to interrupt the blocked call to read()
+        
+
+-> we may be waiting for multiple possible events
+    e.g., data could arrive on more than one socket, in any order
+    
+    
+        read(sock1, ...);
+        read(sock2, ...);
+            <- can't receive data from sock2 until data from sock1 arrives
+            
+        accept(listener, ...)
+        ...
+        read(socket, ...)
+            <- can't accept connections until this read() returns
+        
+    we can use poll() to avoid these problem areas
+        poll() can wait for multiple events
+        when any of these events happens, it indicates which one(s)
+        
+    we can use multiple threads, each waiting for one event
+        may require some coordination between threads (pthreads)
+        
+example scenario:
+    in our protocol: after a game, both parties indicate whether they
+        want to continue
+        
+    what if player A wants to continue, but player B wants to quit?
+        (our design says the game session ends once one player quits)
+        
+    with a single thread, this is easy:
+        as soon as we see the QUIT from B, we can close both connections
+        and terminate
+        
+    if we have one thread per connection, thread A will have called
+    read() again (and blocked) before the QUIT from B arrives
+        -> we can still interrupt a blocked system call using signals
+        
+        pthread_kill() lets us send signals to specific threads
+        we can use signals such as SIGUSR1 that won't be sent by the OS
+        
+        
+recap:
+    we will often want to wait for one of multiple events to occur
+    system calls like accept() or read() can only wait for one event
+    
+    poll() lets us wait for multiple events (relating to file descriptors
+        or timeouts)
+    
+    multiple threads also allow us to wait for multiple events,
+        including signals from other threads
+
+
+
+multi-byte messages
+-------------------
+
+    consider this scenario
+    
+        recv_msg(&s1, &m1);
+        recv_msg(&s2, &m2);
+            <- can't receive message from s2 until after s1
+            
+            
+        do {
+            poll({s1, s2})
+            if (data arrived on s1) recv_msg(s1, m1)        
+            if (data arrived on s2) recv_msg(s2, m2)
+        } until we got both messages
+            <- if recv_msg doesn't block, this is maximally responsive
+            <- problem if s1 sends two messages
+            
+    one approach:
+        split recv_msg() into two functions
+        
+        refresh_handle() receives incoming data and stores it in a buffer
+        parse_msg() determines whether the buffer contains a message
+        
+        
+    do {
+        check for message from s1
+        check for message from s2
+        if < 2 messages:
+            poll()
+            call refresh handle on the socket that got data
+            (unless it already has a message waiting)
+    } until 2 messages
+        
+        
+multi-byte message formatting
+-----------------------------
+
+TCP gives us a stream of incoming bytes
+how can we tell where one message ends and the next begins?
+
+-> common mistake: assume each call to read() will obtain one message
+    this is often the case! (but not always)
+    
+our format needs to indicate where messages begin and end
+
+- fixed-length messages
+- delimited messages
+    some byte sequence that indicates the end of a message
+- explicit length field
+    indicate how many more bytes are coming
+- explicit length fiend and delimiter
+    more confidence that message has ended
+    but now we have to deal with what happens when they disagree
+    
+    
+revised RPSP
+
+    PLAY <player name>
+        P|<name>||
+        
+    WAIT
+        W
+        
+    BEGIN <opponent name>
+        B|<name>||
+        
+    MOVE <move>
+        M|<move>||
+        
+    RESULT <condition> <opponent's move>
+        R|<W/L/D/F>|<move>||
+    
+    CONTINUE
+        C
+    
+    QUIT
+        Q

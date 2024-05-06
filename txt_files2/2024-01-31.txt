@@ -1,0 +1,169 @@
+CS 214 / Generic memory operations
+==================================
+
+case study: sorting an array
+
+    we might have a function that sorts an array of ints
+        
+        void sort_ints(int *array, size_t arraylength);
+        void sort_floats(float *array, size_t arraylength);
+        void sort_strings(char **array, size_t arraylength);
+        void sort_strings_descending(char **a, size_t len);
+        
+    having to write multiple functions are are basically the same
+        is frustrating (also bugs hide in duplicated code)
+        
+we would like a generic sorting function that works with any array
+- we need a way to pass the array's address that works for any type
+    void *
+    
+- we need a way to indicate the comparison operation
+    solution: pass a pointer to a comparison function
+    
+        int (*compare)(void *, void *)
+        
+        typedef int (*comparison_function)(void *, void *);
+
+- we need to specify the element length
+
+void sort(
+    void *array,
+    size_t arraylength,   // dimension of the array
+    size_t elementsize,   // size of elements (in chars)
+    int (*comparison_function)(void *, void *)
+);
+
+
+
+memcpy() - copies data from one object to another
+
+    void *memcpy(void *dest, void *src, size_t length);
+        // think like:  *dest = *src;
+    
+    
+    requirements:
+        src and dest must point to objects with at least length bytes
+        src and dest cannot overlap
+        
+    you could write your own memcpy, but the memcpy() in the standard
+    library will almost certainly be faster
+    
+memmove() - copies data from one object to another
+    regions are permitted to overlap
+    
+    useful if you aren't certain about disjoint memory
+    or, e.g., to shift elements in an array
+    
+
+
+strcpy() - copies a string from one object to another
+
+    char *strcpy(char *dest, char *src);
+    
+        uses the terminator in src to determine how many bytes to copy
+        
+        src must be a string (contain a terminator)
+        dest must be an object big enough for the string
+        
+    
+    strcpy() does more work than memmove(), because it has to look
+        for the terminator
+    
+    only really useful if we don't know the length of src, but we also
+    know it isn't longer than dest
+    
+        char src[100] = "foo", dest[100];
+        strcpy(dest, src);
+    
+    often, we will know how big src is; then just use memcpy()
+    
+        int len = strlen(src) + 1;
+        char *dest = malloc(len);
+        memcpy(dest, src, len);
+    
+        // or use strdup(), if you have it
+        
+strncpy() - copies a string (up to n bytes) from src to dest
+
+    char *strncpy(char *dest, char *src, size_t n);
+    
+        will not write more than n bytes to dest
+        - but if it writes n bytes before it finds the terminator,
+            it won't write a terminator to dest
+
+        it is unclear how this is useful
+
+further reading:
+    memset()
+    calloc()
+    realloc()
+        
+-----
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>    // but why?
+
+void sort(void *array, size_t alen, size_t esize, int (*compare)(const void *, const void *))
+{
+    int i, j;
+    char *base = array;
+    char *temp = malloc(esize);
+
+    for (i = 0; i < alen; i++) {
+        for (j = 1; j < alen; j++) {
+            char *prev = base + (j - 1) * esize;
+            char *this = base + j * esize;
+            if (compare(prev, this) > 0) {
+                // swap
+                memcpy(temp, this, esize);
+                memcpy(this, prev, esize);
+                memcpy(prev, temp, esize);
+            }
+        }
+    }
+
+    free(temp);
+}
+
+int compare_ints(const void *a, const void *b)
+{
+    int x = *(int *)a;
+    int y = *(int *)b;
+    return x - y;
+}
+
+int compare_strings(const void *a, const void *b)
+{
+    char *x = *(char **)a;
+    char *y = *(char **)b;
+
+    return strcmp(x, y);
+}
+
+
+
+#define ALEN 5
+#define BLEN 4
+
+int main(int argc, char **argv)
+{
+    int A[] = { 8, 3, 25, 0, -9 };
+    char *B[] = { "foo", "bar", "quux", "falala" };
+
+    sort(A, ALEN, sizeof(int), compare_ints);
+    sort(B, BLEN, sizeof(char *), compare_strings);
+
+    for (int i = 0; i < ALEN; i++) {
+        printf(" %d", A[i]);
+    }
+    printf("\n");
+
+    for (int i = 0; i < BLEN; i++) {
+        printf(" %s", B[i]);
+    }
+    printf("\n");
+
+    return EXIT_SUCCESS;
+}
